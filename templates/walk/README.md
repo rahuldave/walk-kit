@@ -1,6 +1,6 @@
 # The walk through @project@
 
-@project@ grew in steps, with one commit and one tag for each step. This kit replays the class with
+@project@ grew in steps, with one commit and one tag for each step. This repository replays the class with
 [timewalk](https://rahuldave.com/timewalk/). At every step, the page shows the files as they were and what
 the step changed. It also has terminals in the repository at that step, and the notes of the step with
 their commands.
@@ -9,13 +9,13 @@ their commands.
 
 - [uv](https://docs.astral.sh/uv/), which also runs timewalk from GitHub
 - [git](https://git-scm.com/)
-- [just](https://just.systems/), which runs the recipes of this kit
+- [just](https://just.systems/), which runs the recipes of this repository
 - Chrome, Edge or another recent browser
 
 ## Start
 
-1. Fork this kit on GitHub, so that you can save your own notes. Then clone your fork.
-2. In the folder of the kit, run `just present`.
+1. Fork this repository on GitHub, so that you can save your own notes. Then clone your fork.
+2. In its folder, run `just present`.
 3. Open the address that timewalk prints.
 
 ```
@@ -54,5 +54,5 @@ your fork. To clone from another address, run `just setup url=<address>` before 
 - **Main** is a terminal in `repo/`, your clone of @project@. A move never touches it. Work there on
   `main`, commit, and push to your own fork.
 - **PDF** makes a PDF of the notes of every step. `just pdf` makes the same file, `walk.pdf`. Git
-  ignores `walk.pdf`, so your own PDF never changes your fork. The kit may also ship `@project@.pdf`, the
+  ignores `walk.pdf`, so your own PDF never changes your fork. This repository may also ship `@project@.pdf`, the
   PDF of the walk as written.

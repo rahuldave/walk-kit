@@ -3,7 +3,7 @@
     python3 student_pdf.py --project bla --notes notes.md --out build/bla-student.pdf
     python3 student_pdf.py ... --slides slides         put the slides before the notes of each step
 
-The notes are the ones the kit gets from `walk_update.py`, so the PDF is what a student sees. They are
+The notes are the ones the walk repository gets from `walk_update.py`, so the PDF is what a student sees. They are
 written beside the PDF, as PROJECT-walk.md, because timewalk-pdf reads a file. Keep the output folder out of
 git: the PDF is made again whenever the notes change.
 """

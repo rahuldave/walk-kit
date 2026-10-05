@@ -1,6 +1,6 @@
 # The walk through @project@
 
-This repository is a kit for timewalk. It replays the steps of the project @upstream@/@project@. A student
+This repository is a walk for timewalk. It replays the steps of the project @upstream@/@project@. A student
 forks it, runs `just present`, and opens the address that timewalk prints.
 
 - `walk.md` holds the notes of every step. The student edits them on the page, or in an editor.

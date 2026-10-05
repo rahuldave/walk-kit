@@ -1,9 +1,9 @@
-"""Make the walk kit of a project: a new repository that students fork, to replay the project's steps.
+"""Make a project's walk repository, PROJECT-walk: the repository that students fork to replay the steps.
 
-    python3 walk_init.py --project bla --upstream owner --kit ~/Projects/bla-walk
-    python3 walk_init.py ... --no-github        make the kit on this machine only
+    python3 walk_init.py --project bla --upstream owner --walk ~/Projects/bla-walk
+    python3 walk_init.py ... --no-github        make it on this machine only
 
-The kit holds a justfile (present, setup, pdf), a .gitignore (repo/, worktree/, walk.pdf), a README, an
+It holds a justfile (present, setup, pdf), a .gitignore (repo/, worktree/, walk.pdf), a README, an
 AGENTS.md with a CLAUDE.md that reads it, and walk.md with only its preamble: `walk_update.py` fills it
 from the class notes. The script commits the files, then asks before it creates the public repository
 OWNER/PROJECT-walk on GitHub and pushes to it.
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from common import TIMEWALK, fill, run, yes
 
-FILES = {  # the kit's file: its template
+FILES = {  # a file of the walk repository: its template
     "justfile": "walk/justfile",
     ".gitignore": "walk/gitignore",
     "README.md": "walk/README.md",
@@ -26,34 +26,34 @@ FILES = {  # the kit's file: its template
 
 
 def main() -> int:  # The exit code
-    """Write the kit, commit it, and on a yes create its repository on GitHub."""
+    """Write the walk repository, commit it, and on a yes create it on GitHub."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--project", required=True, help="the project's name, as its repository is named")
     parser.add_argument("--upstream", required=True, help="the project's owner on GitHub")
-    parser.add_argument("--kit", required=True, type=Path, help="the folder of the new kit")
-    parser.add_argument("--owner", help="the kit's owner on GitHub (default: the upstream owner)")
+    parser.add_argument("--walk", required=True, type=Path, help="the folder of the new walk repository")
+    parser.add_argument("--owner", help="its owner on GitHub (default: the upstream owner)")
     parser.add_argument("--timewalk", default=TIMEWALK, help=f"timewalk to run (default: {TIMEWALK})")
     parser.add_argument("--no-github", action="store_true", help="do not create a repository on GitHub")
     args = parser.parse_args()
-    kit = args.kit.expanduser().resolve()
-    if kit.exists() and any(kit.iterdir()):
-        print(f"walk-init: {kit} exists and is not empty. walk-update refreshes a kit", file=sys.stderr)
+    walk = args.walk.expanduser().resolve()
+    if walk.exists() and any(walk.iterdir()):
+        print(f"walk-init: {walk} exists and is not empty. walk-update refreshes it", file=sys.stderr)
         return 2
     values = {"project": args.project, "upstream": args.upstream, "timewalk": args.timewalk}
-    kit.mkdir(parents=True, exist_ok=True)
+    walk.mkdir(parents=True, exist_ok=True)
     for name, template in FILES.items():
-        (kit / name).write_text(fill(template, values), encoding="utf-8")
-        print(f"walk-init: wrote {kit / name}")
-    run("git", "init", "--quiet", "--initial-branch=main", cwd=kit)
-    run("git", "add", "-A", cwd=kit)
-    run("git", "commit", "--quiet", "-m", f"The walk kit for {args.project}", cwd=kit)
-    print(f"walk-init: {kit} is a repository with one commit")
-    repo = f"{args.owner or args.upstream}/{args.project}-walk"
-    later = f"gh repo create {repo} --public --source {kit} --remote origin --push"
-    if args.no_github or not yes(f"walk-init: create the public repository github.com/{repo} and push?"):
+        (walk / name).write_text(fill(template, values), encoding="utf-8")
+        print(f"walk-init: wrote {walk / name}")
+    run("git", "init", "--quiet", "--initial-branch=main", cwd=walk)
+    run("git", "add", "-A", cwd=walk)
+    run("git", "commit", "--quiet", "-m", f"The walk through {args.project}", cwd=walk)
+    print(f"walk-init: {walk} is a repository with one commit")
+    name = f"{args.owner or args.upstream}/{args.project}-walk"
+    later = f"gh repo create {name} --public --source {walk} --remote origin --push"
+    if args.no_github or not yes(f"walk-init: create the public repository github.com/{name} and push?"):
         print(f"walk-init: nothing on GitHub. To create it later: {later}")
         return 0
-    run(*later.split(), cwd=kit)
+    run(*later.split(), cwd=walk)
     return 0
 
 

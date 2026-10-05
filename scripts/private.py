@@ -1,7 +1,7 @@
 """Which lines of the class notes are private: the one place that says so.
 
 The class notes hold the script of every step and the presenter's own cues. timewalk shows every line
-of a notes file, cues included, so `walk-update` leaves these lines out of the kit's `walk.md`:
+of a notes file, cues included, so `walk-update` leaves these lines out of the walk repository's `walk.md`:
 
 - a cue for the presenter: a line that starts with `> Say:` or `> Note:`
 - a planned time: a line `time: m:ss`, which only the presenter's clock band uses

@@ -28,7 +28,7 @@ def fill(
 def walk_text(
     notes: str,  # The class notes, with the presenter's private cues
     project: str,  # The project's name, for the title
-) -> str:  # The notes for students: the kit's preamble, then the steps without the private lines
+) -> str:  # The notes for students: the walk's preamble, then the steps without the private lines
     """Make the students' notes from the class notes."""
     start = notes.find("\n## ")
     body = notes[start + 1 :] if start >= 0 else ""

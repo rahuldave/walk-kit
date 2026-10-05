@@ -5,8 +5,8 @@
 
 notes.md gets one section for each step tag of the project, `## step-NN Title`, with the first line of
 the tag's note as the title and the rest of the note as a start for the prose. The justfile has setup,
-present, handout, student-pdf, walk-init and walk-update. It finds the project and the kit beside the
-class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
+present, handout, student-pdf, walk-init and walk-update. It finds the project and the walk
+repository beside the class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
 creates the private repository OWNER/PROJECT-class on GitHub and pushes to it.
 """
 
@@ -43,7 +43,7 @@ def steps(
 
 
 def default(
-    path: Path,  # The project or the kit
+    path: Path,  # The project or the walk repository
     folder: Path,  # The class folder
     name: str,  # The folder's name when it sits beside the class folder
 ) -> str:  # A just expression: the folder beside this justfile, or else the path as written
@@ -71,13 +71,13 @@ def main() -> int:  # The exit code
     parser.add_argument("--upstream", required=True, help="the project's owner on GitHub")
     parser.add_argument("--repo", required=True, type=Path, help="the project's repository, with step tags")
     parser.add_argument("--dir", required=True, type=Path, help="the folder of the new class material")
-    parser.add_argument("--kit", type=Path, help="the folder of the kit (default: PROJECT-walk beside --dir)")
+    parser.add_argument("--walk", type=Path, help="the walk repository (default: PROJECT-walk beside --dir)")
     parser.add_argument("--timewalk", default=TIMEWALK, help=f"timewalk to run (default: {TIMEWALK})")
     parser.add_argument("--no-github", action="store_true", help="do not create a repository on GitHub")
     args = parser.parse_args()
     folder = args.dir.expanduser().resolve()
     repo = args.repo.expanduser().resolve()
-    kit = (args.kit or folder.parent / f"{args.project}-walk").expanduser().resolve()
+    walk = (args.walk or folder.parent / f"{args.project}-walk").expanduser().resolve()
     if folder.exists() and any(folder.iterdir()):
         print(f"class-init: {folder} exists and is not empty", file=sys.stderr)
         return 2
@@ -86,10 +86,10 @@ def main() -> int:  # The exit code
         return 2
     values = {"project": args.project, "upstream": args.upstream, "timewalk": args.timewalk,
               "repo_default": default(repo, folder, args.project),
-              "kit_default": default(kit, folder, f"{args.project}-walk")}
+              "walk_default": default(walk, folder, f"{args.project}-walk")}
     if repo.parent != folder.parent:
         print(f"class-init: {repo} is not beside {folder}; the justfile names it, so a clone elsewhere "
-              "needs WALK_REPO")
+              "needs PROJECT_DIR")
     (folder / "slides").mkdir(parents=True, exist_ok=True)
     for name, template in FILES.items():
         (folder / name).write_text(fill(template, values), encoding="utf-8")

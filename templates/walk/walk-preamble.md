@@ -10,6 +10,6 @@ right of the page.
 - **A cue** is a line that starts with `> `. The notes column shows it shaded.
 - **Edit** at the top of the column changes the notes of the step, and **Save** writes them into
   `walk.md`. Commit `walk.md` to your fork to keep your notes.
-- **A move throws away edits.** The kit starts timewalk with `--discard-edits`, so a move to another step
+- **A move throws away edits.** `just present` starts timewalk with `--discard-edits`, so a move to another step
   throws away your edits in `worktree/`.
 

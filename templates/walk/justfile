@@ -1,6 +1,6 @@
 # The walk through @project@: replay the class with timewalk. Run `just` to see the list.
 #
-# The kit names the project and the upstream owner here. `just setup` clones the project into repo/, and
+# This file names the project and the upstream owner here. `just setup` clones the project into repo/, and
 # timewalk puts its replay copy in worktree/. Both folders are in .gitignore.
 
 project := "@project@"
@@ -44,7 +44,7 @@ setup url="":
     git -C repo fetch --quiet --tags --force upstream
     echo "setup: repo/ is $(git -C repo remote get-url origin), with $(git -C repo tag -l 'step-*' | wc -l | tr -d ' ') steps from {{ upstream }}/{{ project }}"
 
-# Make walk.pdf: the slides, if the kit has any, with the notes of every step after them
+# Make walk.pdf: the slides, if there are any, with the notes of every step after them
 pdf:
     #!/usr/bin/env bash
     set -euo pipefail

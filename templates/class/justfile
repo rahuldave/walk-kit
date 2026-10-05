@@ -2,21 +2,21 @@
 # them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind walk-init,
 # walk-update and student-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
 #
-# The project and the kit are found beside this folder, as ../@project@ and ../@project@-walk, unless
-# WALK_REPO and WALK_KIT name other folders. WALK_SKILL names the skill, if it is not in ~/.agents/skills.
+# The project and the walk repository are found beside this folder, as ../@project@ and ../@project@-walk,
+# unless PROJECT_DIR and WALK_DIR name other folders. WALK_SKILL names the skill, if it is not in ~/.agents/skills.
 
 project := "@project@"
 upstream := "@upstream@"
 timewalk := "@timewalk@"
-repo := env("WALK_REPO", @repo_default@)
-kit := env("WALK_KIT", @kit_default@)
+repo := env("PROJECT_DIR", @repo_default@)
+walk := env("WALK_DIR", @walk_default@)
 skill := env("WALK_SKILL", home_directory() / ".agents/skills/walk")
 
 [private]
 default:
     @just --list --unsorted
 
-# Get what the class needs: the project beside this folder, with its step tags, and the kit. Says if the skill is missing
+# Get what the class needs: the project beside this folder, with its step tags, and @project@-walk. Says if the skill is missing
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -32,14 +32,14 @@ setup:
     }
     if [ ! -d "{{ repo }}/.git" ]; then clone "{{ project }}" "{{ repo }}"; fi
     echo "setup: the project is {{ repo }}, with $(git -C "{{ repo }}" tag -l 'step-*' | wc -l | tr -d ' ') steps"
-    if [ ! -d "{{ kit }}/.git" ]; then
+    if [ ! -d "{{ walk }}/.git" ]; then
         if git ls-remote --exit-code "https://github.com/{{ upstream }}/{{ project }}-walk.git" HEAD > /dev/null 2>&1; then
-            clone "{{ project }}-walk" "{{ kit }}"
+            clone "{{ project }}-walk" "{{ walk }}"
         else
-            echo "setup: there is no kit yet; just walk-init makes one"
+            echo "setup: there is no @project@-walk yet; just walk-init makes it"
         fi
     fi
-    if [ -d "{{ kit }}/.git" ]; then echo "setup: the kit is {{ kit }}"; fi
+    if [ -d "{{ walk }}/.git" ]; then echo "setup: the walk repository is {{ walk }}"; fi
     if [ -f "{{ skill }}/scripts/common.py" ]; then
         echo "setup: the walk skill is {{ skill }}"
     else
@@ -74,16 +74,18 @@ student-pdf:
     if [ -f slides/slides.toml ]; then slides=(--slides slides); fi
     python3 "{{ skill }}/scripts/student_pdf.py" --project "{{ project }}" --notes notes.md ${slides[@]+"${slides[@]}"} --out "build/{{ project }}-student.pdf"
 
-# Make the walk kit for students, a new repository. Asks before it creates the repository on GitHub
+# Make @project@-walk, the repository that students fork. Asks before it creates the repository on GitHub
 walk-init *args:
     #!/usr/bin/env bash
     set -euo pipefail
     test -f "{{ skill }}/scripts/common.py" || { echo "walk-init: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    python3 "{{ skill }}/scripts/walk_init.py" --project "{{ project }}" --upstream "{{ upstream }}" --kit "{{ kit }}" {{ args }}
+    python3 "{{ skill }}/scripts/walk_init.py" --project "{{ project }}" --upstream "{{ upstream }}" --walk "{{ walk }}" {{ args }}
 
-# Refresh the kit from notes.md, without the private cues. Shows the diff, and commits on a yes. Add --slides slides
+# Refresh @project@-walk from notes.md, without the private cues, and from slides/. Shows the diff, and commits on a yes
 walk-update *args:
     #!/usr/bin/env bash
     set -euo pipefail
     test -f "{{ skill }}/scripts/common.py" || { echo "walk-update: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    python3 "{{ skill }}/scripts/walk_update.py" --project "{{ project }}" --notes notes.md --kit "{{ kit }}" {{ args }}
+    slides=()
+    if [ -f slides/slides.toml ]; then slides=(--slides slides); fi
+    python3 "{{ skill }}/scripts/walk_update.py" --project "{{ project }}" --notes notes.md --walk "{{ walk }}" ${slides[@]+"${slides[@]}"} {{ args }}

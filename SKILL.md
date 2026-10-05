@@ -1,6 +1,6 @@
 ---
 name: walk
-description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class. Use it to make the public kit that students fork, PROJECT-walk, and to refresh the kit without the private cues. Use it to make the teacher's handout and the students' PDF.
+description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class. Use it to make the public walk repository that students fork, PROJECT-walk, and to refresh it without the private cues. Use it to make the teacher's handout and the students' PDF.
 ---
 
 # walk: a class that replays a project, step by step
@@ -11,7 +11,7 @@ A walk uses three repositories for a project called `bla`:
 |---|---|---|
 | `bla` | The project. One commit and one annotated tag `step-NN` for each step | Public |
 | `bla-class` | The notes with private cues, the slides, the recipes | Private |
-| `bla-walk` | The kit: the notes without private cues, the slides, a justfile | Public. Students fork it |
+| `bla-walk` | The walk: the notes without private cues, the slides, a justfile | Public. Students fork it |
 
 The scripts are in this skill's `scripts/` folder. They take the project, the owner and the paths as
 arguments, and hold no project name. Run them with `python3`, from any folder.
@@ -41,14 +41,14 @@ The project must have its step tags on GitHub. `git push origin main --tags` put
    It commits, then asks before it creates the private repository `OWNER/bla-class`.
 
 2. **Get the parts beside it.** In the class folder, run `just setup`. It clones the project and the
-   kit beside the class folder if they are missing, and says if this skill is not installed. Run it
+   walk repository beside the class folder if they are missing, and says if this skill is not installed. Run it
    first in every fresh clone of a class folder.
 
-3. **Make the kit.** In the class folder, run `just walk-init`. It asks before it creates the public
+3. **Make the walk repository.** In the class folder, run `just walk-init`. It asks before it creates the public
    repository `OWNER/bla-walk`.
 
-4. **Keep the kit up to date.** In the class folder, run `just walk-update`. Add `--slides slides` to copy
-   the slides, and `--pdf` to ship `bla.pdf`. It shows the diff, and commits on a yes. It never pushes.
+4. **Keep the walk repository up to date.** In the class folder, run `just walk-update`. It copies
+   `slides/` when there is a `slides/slides.toml`. Add `--pdf` to ship `bla.pdf`. It shows the diff, and commits on a yes. It never pushes.
 
 5. **Make the PDFs** in the class folder. They go into `build/`, which git ignores.
    - `just handout` makes `build/bla-handout.pdf`, with the private cues, for the teacher
@@ -64,8 +64,9 @@ included. To show a cue to students, start it with another word, for example `> 
 
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Rehearse every command** of the notes at its step in the replay copy before it goes into the notes.
-- **Never write `walk.pdf` in a kit.** It is the student's own PDF, and the kit's `.gitignore` lists it.
-- **Keep paths out of the class justfile.** It finds the project as `../PROJECT` and the kit as
-  `../PROJECT-walk`. `WALK_REPO` and `WALK_KIT` name other folders for one machine.
+- **Never write `walk.pdf` in a walk repository.** It is the student's own PDF, and its `.gitignore`
+  lists it.
+- **Keep paths out of the class justfile.** It finds the project as `../PROJECT` and the walk repository
+  as `../PROJECT-walk`. `PROJECT_DIR` and `WALK_DIR` name other folders for one machine.
 - **Do not copy the scripts** into a class folder. The class justfile calls them here, through
   `~/.agents/skills/walk`, or the folder that `WALK_SKILL` names.
