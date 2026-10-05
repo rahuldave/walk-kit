@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from common import TIMEWALK, run, walk_text
+from common import TIMEWALK, UVX, run, walk_text
 
 
 def main() -> int:  # The exit code
@@ -29,7 +29,7 @@ def main() -> int:  # The exit code
     notes = out.with_name(f"{args.project}-walk.md")
     notes.write_text(walk_text(args.notes.read_text(encoding="utf-8"), args.project), encoding="utf-8")
     manifest = [str((args.slides / "slides.toml").resolve())] if args.slides else []
-    run("uvx", "--from", args.timewalk, "timewalk-pdf", *manifest, "--notes", str(notes), "--with-notes",
+    run(*UVX, args.timewalk, "timewalk-pdf", *manifest, "--notes", str(notes), "--with-notes",
         "--title", args.project, "-o", str(out), cwd=Path.cwd())
     return 0
 

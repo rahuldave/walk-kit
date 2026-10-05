@@ -1,9 +1,12 @@
-"""What the scripts share: the version of timewalk, the templates, and the student's notes.
+"""What the scripts share: where timewalk comes from, the templates, and the student's notes.
 
-The version of timewalk is written here and nowhere else. Every template that names timewalk gets it
-from here, through `@timewalk@`.
+timewalk is not pinned: every run fetches the newest commit on GitHub (`--refresh-package timewalk`), so a
+new timewalk reaches every class at once. The environment variable TIMEWALK names another source, for
+example a working copy, `TIMEWALK=~/Projects/timewalk`. The templates always name GitHub,
+through `@timewalk@`, whatever TIMEWALK says when they are filled.
 """
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -11,7 +14,9 @@ from private import public
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES = HERE.parent / "templates"
-TIMEWALK = "git+https://github.com/rahuldave/timewalk@v1.0.1"
+GITHUB = "git+https://github.com/rahuldave/timewalk"  # what the templates name
+TIMEWALK = os.environ.get("TIMEWALK", GITHUB)  # what a run of these scripts uses
+UVX = ["uvx", "--refresh-package", "timewalk", "--from"]  # then the source, then the command
 
 
 def fill(

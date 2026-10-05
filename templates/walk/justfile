@@ -5,7 +5,8 @@
 
 project := "@project@"
 upstream := "@upstream@"
-timewalk := "@timewalk@"
+# timewalk is not pinned: each run fetches the newest. TIMEWALK names another source, a working copy say
+timewalk := env("TIMEWALK", "@timewalk@")
 
 [private]
 default:
@@ -17,7 +18,7 @@ present *args: setup
     set -euo pipefail
     slides=()
     if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
-    uvx --from "{{ timewalk }}" timewalk repo --replay worktree --notes walk.md ${slides[@]+"${slides[@]}"} --discard-edits {{ args }}
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk repo --replay worktree --notes walk.md ${slides[@]+"${slides[@]}"} --discard-edits {{ args }}
 
 # Clone the project into repo/: your own fork if you have one, or else the upstream. Then fetch the tags of the steps
 setup url="":
@@ -50,4 +51,4 @@ pdf:
     set -euo pipefail
     slides=()
     if [ -f slides/slides.toml ]; then slides=(slides/slides.toml); fi
-    uvx --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes walk.md --with-notes --title "{{ project }}" -o walk.pdf
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes walk.md --with-notes --title "{{ project }}" -o walk.pdf

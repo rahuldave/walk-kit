@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from common import TIMEWALK, run, walk_text, yes
+from common import TIMEWALK, UVX, run, walk_text, yes
 from private import is_private
 
 
@@ -51,7 +51,7 @@ def main() -> int:  # The exit code
     if args.pdf:
         manifest = ["slides/slides.toml"] if (walk / "slides" / "slides.toml").exists() else []
         out = f"{args.project}.pdf"
-        run("uvx", "--from", args.timewalk, "timewalk-pdf", *manifest, "--notes", "walk.md",
+        run(*UVX, args.timewalk, "timewalk-pdf", *manifest, "--notes", "walk.md",
             "--with-notes", "--title", args.project, "-o", out, cwd=walk)
     run("git", "add", "-A", cwd=walk)
     if subprocess.run(["git", "-C", str(walk), "diff", "--cached", "--quiet"]).returncode == 0:

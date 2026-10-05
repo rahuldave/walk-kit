@@ -13,7 +13,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from common import TIMEWALK, fill, run, yes
+from common import GITHUB, fill, run, yes
 
 FILES = {  # a file of the walk repository: its template
     "justfile": "walk/justfile",
@@ -32,7 +32,7 @@ def main() -> int:  # The exit code
     parser.add_argument("--upstream", required=True, help="the project's owner on GitHub")
     parser.add_argument("--walk", required=True, type=Path, help="the folder of the new walk repository")
     parser.add_argument("--owner", help="its owner on GitHub (default: the upstream owner)")
-    parser.add_argument("--timewalk", default=TIMEWALK, help=f"timewalk to run (default: {TIMEWALK})")
+    parser.add_argument("--timewalk", default=GITHUB, help=f"where the justfile gets timewalk (default: {GITHUB})")
     parser.add_argument("--no-github", action="store_true", help="do not create a repository on GitHub")
     args = parser.parse_args()
     walk = args.walk.expanduser().resolve()

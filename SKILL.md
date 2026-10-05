@@ -26,6 +26,9 @@ Check that these are on the machine, and say which are missing:
 - **Chrome or Edge**, for the PDFs. Without them: `uvx playwright install chromium`
 - **Python 3.10 or later** as `python3`, for the scripts. They use only the standard library
 
+timewalk is not pinned. Every run fetches the newest from GitHub. `TIMEWALK` names another source,
+for example a working copy.
+
 The project must have its step tags on GitHub. `git push origin main --tags` puts them there.
 
 ## Tasks

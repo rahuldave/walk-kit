@@ -83,6 +83,16 @@ You edit everything in `bla-class`, and never in `bla` or `bla-walk`.
 timewalk's documentation describes the [notes](https://rahuldave.com/timewalk/notes.html), the
 [slides](https://rahuldave.com/timewalk/slides.html) and the [page](https://rahuldave.com/timewalk/page.html).
 
+## The version of timewalk
+
+timewalk is not pinned. Every recipe and script runs the newest commit of timewalk on GitHub, and fetches
+it again at each start, which takes about a second. To run another copy, for example a working copy that
+you are changing, set `TIMEWALK` to its folder:
+
+```
+TIMEWALK=~/Projects/timewalk just present
+```
+
 ## Private cues
 
 timewalk shows every line of a notes file. So the notes that students get leave out your private lines. A private line starts with `> Say:` or

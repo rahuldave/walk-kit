@@ -7,7 +7,8 @@
 
 project := "@project@"
 upstream := "@upstream@"
-timewalk := "@timewalk@"
+# timewalk is not pinned: each run fetches the newest. TIMEWALK names another source, a working copy say
+timewalk := env("TIMEWALK", "@timewalk@")
 repo := env("PROJECT_DIR", @repo_default@)
 walk := env("WALK_DIR", @walk_default@)
 skill := env("WALK_SKILL", home_directory() / ".agents/skills/walk")
@@ -54,7 +55,7 @@ present *args: setup
     set -euo pipefail
     slides=()
     if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
-    uvx --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
 
 # Make your handout, build/PROJECT-handout.pdf: the slides, with the notes of each step after them, your cues included
 handout:
@@ -63,7 +64,7 @@ handout:
     mkdir -p build
     slides=()
     if [ -f slides/slides.toml ]; then slides=(slides/slides.toml); fi
-    uvx --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes notes.md --with-notes --title "{{ project }}" -o "build/{{ project }}-handout.pdf"
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes notes.md --with-notes --title "{{ project }}" -o "build/{{ project }}-handout.pdf"
 
 # Make the students' PDF, build/PROJECT-student.pdf: the slides and the notes, without your private cues
 student-pdf:
