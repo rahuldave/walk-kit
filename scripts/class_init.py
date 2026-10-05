@@ -4,8 +4,9 @@
     python3 class_init.py ... --no-github        make it on this machine only
 
 notes.md gets one section for each step tag of the project, `## step-NN Title`, with the first line of
-the tag's note as the title and the rest of the note as a start for the prose. The justfile has present,
-handout, student-pdf, walk-init and walk-update. The script commits the files, then asks before it
+the tag's note as the title and the rest of the note as a start for the prose. The justfile has setup,
+present, handout, student-pdf, walk-init and walk-update. It finds the project and the kit beside the
+class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
 creates the private repository OWNER/PROJECT-class on GitHub and pushes to it.
 """
 
@@ -41,6 +42,17 @@ def steps(
     return found
 
 
+def default(
+    path: Path,  # The project or the kit
+    folder: Path,  # The class folder
+    name: str,  # The folder's name when it sits beside the class folder
+) -> str:  # A just expression: the folder beside this justfile, or else the path as written
+    """Say where the justfile finds a folder, so that a clone on another machine finds it too."""
+    if path == folder.parent / name:
+        return f'parent_directory(justfile_directory()) / "{name}"'
+    return f'"{path}"'
+
+
 def notes_text(
     project: str,  # The project's name
     repo: Path,  # The project's repository
@@ -72,8 +84,12 @@ def main() -> int:  # The exit code
     if not (repo / ".git").exists():
         print(f"class-init: {repo} is not a git repository", file=sys.stderr)
         return 2
-    values = {"project": args.project, "upstream": args.upstream, "repo": str(repo), "kit": str(kit),
-              "timewalk": args.timewalk}
+    values = {"project": args.project, "upstream": args.upstream, "timewalk": args.timewalk,
+              "repo_default": default(repo, folder, args.project),
+              "kit_default": default(kit, folder, f"{args.project}-walk")}
+    if repo.parent != folder.parent:
+        print(f"class-init: {repo} is not beside {folder}; the justfile names it, so a clone elsewhere "
+              "needs WALK_REPO")
     (folder / "slides").mkdir(parents=True, exist_ok=True)
     for name, template in FILES.items():
         (folder / name).write_text(fill(template, values), encoding="utf-8")

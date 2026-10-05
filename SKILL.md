@@ -40,13 +40,17 @@ The project must have its step tags on GitHub. `git push origin main --tags` put
    justfile, a `.gitignore` for `build/`, `README.md`, and `AGENTS.md` with a `CLAUDE.md` that reads it.
    It commits, then asks before it creates the private repository `OWNER/bla-class`.
 
-2. **Make the kit.** In the class folder, run `just walk-init`. It asks before it creates the public
+2. **Get the parts beside it.** In the class folder, run `just setup`. It clones the project and the
+   kit beside the class folder if they are missing, and says if this skill is not installed. Run it
+   first in every fresh clone of a class folder.
+
+3. **Make the kit.** In the class folder, run `just walk-init`. It asks before it creates the public
    repository `OWNER/bla-walk`.
 
-3. **Keep the kit up to date.** In the class folder, run `just walk-update`. Add `--slides slides` to copy
+4. **Keep the kit up to date.** In the class folder, run `just walk-update`. Add `--slides slides` to copy
    the slides, and `--pdf` to ship `bla.pdf`. It shows the diff, and commits on a yes. It never pushes.
 
-4. **Make the PDFs** in the class folder. They go into `build/`, which git ignores.
+5. **Make the PDFs** in the class folder. They go into `build/`, which git ignores.
    - `just handout` makes `build/bla-handout.pdf`, with the private cues, for the teacher
    - `just student-pdf` makes `build/bla-student.pdf`, without them, to give to students
 
@@ -61,5 +65,7 @@ included. To show a cue to students, start it with another word, for example `> 
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Rehearse every command** of the notes at its step in the replay copy before it goes into the notes.
 - **Never write `walk.pdf` in a kit.** It is the student's own PDF, and the kit's `.gitignore` lists it.
+- **Keep paths out of the class justfile.** It finds the project as `../PROJECT` and the kit as
+  `../PROJECT-walk`. `WALK_REPO` and `WALK_KIT` name other folders for one machine.
 - **Do not copy the scripts** into a class folder. The class justfile calls them here, through
   `~/.agents/skills/walk`, or the folder that `WALK_SKILL` names.

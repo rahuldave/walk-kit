@@ -45,12 +45,17 @@ Ask your agent to make a class for a project, or run the scripts yourself:
 ```
 python3 ~/.agents/skills/walk/scripts/class_init.py --project bla --upstream you --repo ~/Projects/bla --dir ~/Projects/bla-class
 cd ~/Projects/bla-class
+just setup              # clone the project and the kit beside this folder, if missing
 just walk-init          # make the kit, bla-walk
 just walk-update        # refresh the kit from notes.md
 just present            # open the walk, with your notes and the clock
 just handout            # build/bla-handout.pdf, with your private cues
 just student-pdf        # build/bla-student.pdf, without them
 ```
+
+The class justfile finds the project and the kit beside the class folder, as `../bla` and `../bla-walk`.
+So a clone of the class folder on another machine needs only `just setup`. To keep them somewhere else,
+set `WALK_REPO` and `WALK_KIT`.
 
 Every script that creates a repository on GitHub asks first. `walk-update` shows the diff and asks before
 it commits. No script pushes a kit.

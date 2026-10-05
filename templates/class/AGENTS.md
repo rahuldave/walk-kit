@@ -1,7 +1,8 @@
 # The class material for @project@
 
 This repository is private. It holds the material for a class that walks through the steps of
-@project@ with timewalk. The project itself is @repo@. The public kit for students is @kit@.
+@project@ with timewalk. The project is `../@project@`, beside this folder, and the public kit for
+students is `../@project@-walk`. `just setup` clones them there if they are missing.
 
 ## What is here
 
@@ -25,6 +26,7 @@ This repository is private. It holds the material for a class that walks through
 
 | Recipe | Does |
 |---|---|
+| `just setup` | Clones the project and the kit beside this folder if they are missing, and checks for the skill. Run it first in a fresh clone |
 | `just present` | Opens the walk on the project, with these notes and slides and the clock |
 | `just handout` | Makes `build/@project@-handout.pdf`, with the private cues, for the teacher |
 | `just student-pdf` | Makes `build/@project@-student.pdf`, without the private cues, to give to students |
