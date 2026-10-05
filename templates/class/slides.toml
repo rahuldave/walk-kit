@@ -1,0 +1,13 @@
+# Which slides are shown at which step of @project@.
+#
+# Each line is:  step-name = [ slides, in the order they are shown ]
+#
+#   "intro.md"        every slide in slides/intro.md
+#   "intro.md#2"      only its second slide
+#   "intro.md#2-3"    its second and third
+#   "pictures/a.svg"  a picture on its own
+#
+# A Markdown file holds one slide or several. A line that is exactly --- starts the next slide.
+# A step with no line here shows the code only.
+
+[slides]

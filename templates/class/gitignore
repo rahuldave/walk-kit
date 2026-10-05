@@ -1,0 +1,5 @@
+# What the recipes make: the handout with your cues, the students' PDF and its notes. Made again at will
+/build/
+# Python and the operating system
+__pycache__/
+.DS_Store

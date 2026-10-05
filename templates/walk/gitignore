@@ -1,0 +1,6 @@
+# Made on this machine, never part of the kit: the clone of the project (just setup), and the replay copy
+# that timewalk moves from step to step.
+/repo/
+/worktree/
+# Your own PDF, made by `just pdf`. The PDF that the kit ships has another name, @project@.pdf.
+/walk.pdf

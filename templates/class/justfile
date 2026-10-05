@@ -1,0 +1,47 @@
+# The class material for @project@: the notes with your private cues, the slides, and the recipes that use
+# them. Run `just` to see the list. The scripts behind walk-init, walk-update and student-pdf are the walk
+# skill's: https://github.com/rahuldave/walk-kit
+
+project := "@project@"
+upstream := "@upstream@"
+repo := "@repo@"
+kit := "@kit@"
+timewalk := "@timewalk@"
+skill := env("WALK_SKILL", home_directory() / ".agents/skills/walk")
+
+[private]
+default:
+    @just --list --unsorted
+
+# Open the walk on the project with these notes and slides, the clock on. Prints the address to open
+present *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    slides=()
+    if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
+    uvx --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
+
+# Make your handout, build/PROJECT-handout.pdf: the slides, with the notes of each step after them, your cues included
+handout:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p build
+    slides=()
+    if [ -f slides/slides.toml ]; then slides=(slides/slides.toml); fi
+    uvx --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes notes.md --with-notes --title "{{ project }}" -o "build/{{ project }}-handout.pdf"
+
+# Make the students' PDF, build/PROJECT-student.pdf: the slides and the notes, without your private cues
+student-pdf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    slides=()
+    if [ -f slides/slides.toml ]; then slides=(--slides slides); fi
+    python3 "{{ skill }}/scripts/student_pdf.py" --project "{{ project }}" --notes notes.md ${slides[@]+"${slides[@]}"} --out "build/{{ project }}-student.pdf"
+
+# Make the walk kit for students, a new repository. Asks before it creates the repository on GitHub
+walk-init *args:
+    python3 "{{ skill }}/scripts/walk_init.py" --project "{{ project }}" --upstream "{{ upstream }}" --kit "{{ kit }}" {{ args }}
+
+# Refresh the kit from notes.md, without the private cues. Shows the diff, and commits on a yes. Add --slides slides
+walk-update *args:
+    python3 "{{ skill }}/scripts/walk_update.py" --project "{{ project }}" --notes notes.md --kit "{{ kit }}" {{ args }}
