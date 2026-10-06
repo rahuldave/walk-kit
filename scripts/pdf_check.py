@@ -7,8 +7,8 @@ in `DIR/slides/slides.toml` (default: the current folder), reads the last words 
 and looks for them in the text of the PDF. A slide whose last words are missing is reported: look at its page.
 It also prints the number of pages and their sizes, so that a PDF with mixed page sizes shows.
 
-A slide that is only a picture has no text to look for, and is skipped. The check needs `pdftotext` and `pdfinfo`
-(poppler). It uses only the standard library otherwise.
+A slide that is only a picture has no text to look for, and is skipped. The text is read in the order it was drawn
+(`pdftotext -raw`), so that inline code stays in its line. The check needs `pdftotext` and `pdfinfo` (poppler). It uses only the standard library otherwise.
 """
 
 import re
@@ -33,7 +33,7 @@ def norm(markdown: str) -> str:
     "The text of a line of Markdown as it reads in a PDF: no pictures, no link targets, no HTML tags."
     markdown = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", markdown)               # pictures
     markdown = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", markdown)            # links: keep the words
-    markdown = re.sub(r"</?[A-Za-z][^>]*>", " ", markdown)                       # HTML tags, and only those
+    markdown = re.sub(r"</?(?:img|div|span|br|hr|p|em|strong|b|i|u|a|sup|sub|center|h[1-6])\b[^>]*>", " ", markdown)  # HTML tags, and only these
     return squash(markdown)
 
 
@@ -91,7 +91,7 @@ def main() -> int:
     root = Path(options.get("--class", ".")).expanduser()
     n = int(options.get("--words", 6))
     slides_dir = root / "slides"
-    text = subprocess.run(["pdftotext", pdf, "-"], capture_output=True, text=True, check=True).stdout
+    text = subprocess.run(["pdftotext", "-raw", pdf, "-"], capture_output=True, text=True, check=True).stdout
     flat = squash(text).replace(" ", "")      # the PDF's text is not Markdown or HTML: no tag stripping
     info = subprocess.run(["pdfinfo", "-f", "1", "-l", "99999", pdf], capture_output=True, text=True).stdout
     sizes = sorted(set(re.findall(r"Page\s+\d+ size:\s+([\d.]+ x [\d.]+) pts", info)))
