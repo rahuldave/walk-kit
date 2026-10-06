@@ -5,7 +5,7 @@
 
 notes.md gets one section for each step tag of the project, `## step-NN Title`, with the first line of
 the tag's note as the title and the rest of the note as a start for the prose. The justfile has setup,
-present, handout, student-pdf, walk-init and walk-update. It finds the project and the walk
+present, pdf, check-pdf, walk-init and walk-update. It finds the project and the walk
 repository beside the class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
 creates the private repository OWNER/PROJECT-class on GitHub and pushes to it.
 """

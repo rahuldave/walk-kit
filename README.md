@@ -49,8 +49,8 @@ just setup              # clone the project and bla-walk beside this folder, if 
 just walk-init          # make bla-walk, the repository that students fork
 just walk-update        # refresh bla-walk from notes.md and slides/
 just present            # open the walk, with your notes and the clock
-just handout            # build/bla-handout.pdf, with your private cues
-just student-pdf        # build/bla-student.pdf, without them
+just pdf                # build/bla.pdf: the slides, one page each. The notes are for the step browser
+just check-pdf          # check that no slide is cut off in it
 ```
 
 The class justfile finds the project and the walk repository beside the class folder, as `../bla` and
@@ -75,7 +75,7 @@ You edit everything in `bla-class`, and never in `bla` or `bla-walk`.
    `notes.md` in your editor. The page reads it again at the next move.
 3. **Edit the slides** in your editor. timewalk reads the slide files again each time it shows a slide.
 4. **Try each command** in the **At this step** terminal before it goes into the notes.
-5. **Read the PDFs.** `just handout` makes yours, with your cues. `just student-pdf` makes the students'.
+5. **Read the PDF.** `just pdf` makes it: the slides, one page each, for you and for the students. The notes are not in it; they are for the step browser. `just check-pdf` checks that no slide is cut off.
 6. **Commit and push `bla-class`.** It is private.
 7. **Send it to the students.** `just walk-update` copies the notes and the slides into `bla-walk`, shows
    the diff, and asks before it commits. Then push `bla-walk`.

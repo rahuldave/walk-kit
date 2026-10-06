@@ -9,8 +9,8 @@ notes column of its page, every line of it.
   step. With **run on click** on, a click also runs it. `runs$ ` sends it to the Runs tab, for a command
   that takes a while, and `main$ ` to the Main tab, in the project itself.
 - **A cue** is a line that starts with `> `, for example `> Say: ...` or `> Note: ...`. The notes column
-  shows it shaded. `> Say:` and `> Note:` lines are private. `just walk-update` and `just student-pdf`
-  leave them out, and the `time:` lines too.
+  shows it shaded. `> Say:` and `> Note:` lines are private. `just walk-update` leaves them out, and the `time:`
+  lines too. The notes are not in the PDF: they are for the step browser.
 - **Edit** at the top of the notes column changes the section of the step. **Save** writes it into this
   file.
 - **A move throws away edits.** `just present` starts timewalk with `--discard-edits`. So a script puts a

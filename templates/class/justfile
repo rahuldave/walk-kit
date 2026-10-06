@@ -1,6 +1,6 @@
 # The class material for @project@: the notes with your private cues, the slides, and the recipes that use
 # them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind walk-init,
-# walk-update and student-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
+# walk-update and check-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
 #
 # The project and the walk repository are found beside this folder, as ../@project@ and ../@project@-walk,
 # unless PROJECT_DIR and WALK_DIR name other folders. WALK_SKILL names the skill, if it is not in ~/.agents/skills.
@@ -44,7 +44,7 @@ setup:
     if [ -f "{{ skill }}/scripts/common.py" ]; then
         echo "setup: the walk skill is {{ skill }}"
     else
-        echo "setup: the walk skill is not installed. walk-init, walk-update and student-pdf need it. Install it with:"
+        echo "setup: the walk skill is not installed. walk-init, walk-update and check-pdf need it. Install it with:"
         echo "  git clone https://github.com/rahuldave/walk-kit ~/Projects/walk-kit"
         echo "  mkdir -p ~/.agents/skills && ln -s ~/Projects/walk-kit ~/.agents/skills/walk"
     fi
@@ -57,23 +57,20 @@ present *args: setup
     if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
     uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
 
-# Make your handout, build/PROJECT-handout.pdf: the slides, with the notes of each step after them, your cues included
-handout:
+# Make the PDF, build/PROJECT.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it
+pdf:
     #!/usr/bin/env bash
     set -euo pipefail
+    test -f slides/slides.toml || { echo "pdf: there are no slides; the notes are for the step browser: just present" >&2; exit 1; }
     mkdir -p build
-    slides=()
-    if [ -f slides/slides.toml ]; then slides=(slides/slides.toml); fi
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes notes.md --with-notes --title "{{ project }}" -o "build/{{ project }}-handout.pdf"
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes notes.md --title "{{ project }}" -o "build/{{ project }}.pdf"
 
-# Make the students' PDF, build/PROJECT-student.pdf: the slides and the notes, without your private cues
-student-pdf:
+# Check that no slide is cut off in the PDF: the last words of every slide must be in its text
+check-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f "{{ skill }}/scripts/common.py" || { echo "student-pdf: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    slides=()
-    if [ -f slides/slides.toml ]; then slides=(--slides slides); fi
-    python3 "{{ skill }}/scripts/student_pdf.py" --project "{{ project }}" --notes notes.md ${slides[@]+"${slides[@]}"} --out "build/{{ project }}-student.pdf"
+    test -f "{{ skill }}/scripts/pdf_check.py" || { echo "check-pdf: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    python3 "{{ skill }}/scripts/pdf_check.py" "build/{{ project }}.pdf" --class .
 
 # Make @project@-walk, the repository that students fork. Asks before it creates the repository on GitHub
 walk-init *args:

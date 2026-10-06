@@ -16,7 +16,7 @@ repository for students is `../@project@-walk`. `just setup` clones them there i
 ## The rules of the notes
 
 - **Private lines.** A line that starts with `> Say:` or `> Note:`, and a line `time: m:ss`, stay here.
-  `just walk-update` and `just student-pdf` leave them out. Every other line goes to students.
+  `just walk-update` leaves them out. Every other line goes to students. No PDF has notes: the notes are for the step browser.
 - **Commands.** A line `$ command` is a command for the terminal at the step. `runs$` and `main$` send it
   to other tabs.
 - **Rehearse every command** at its step in the replay copy before it goes into the notes.
@@ -28,8 +28,8 @@ repository for students is `../@project@-walk`. `just setup` clones them there i
 |---|---|
 | `just setup` | Clones the project and `@project@-walk` beside this folder if they are missing, and checks for the skill. Run it first in a fresh clone |
 | `just present` | Opens the walk on the project, with these notes and slides and the clock |
-| `just handout` | Makes `build/@project@-handout.pdf`, with the private cues, for the teacher |
-| `just student-pdf` | Makes `build/@project@-student.pdf`, without the private cues, to give to students |
+| `just pdf` | Makes `build/@project@.pdf`, the slides, one page each, for you and for the students. The notes are not in it |
+| `just check-pdf` | Checks that no slide is cut off in that PDF |
 | `just walk-init` | Makes `@project@-walk`, once. Asks before it creates the public repository |
 | `just walk-update` | Refreshes `@project@-walk` from `notes.md` and `slides/`. Shows the diff, and commits on a yes. Never pushes |
 

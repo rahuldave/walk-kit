@@ -1,6 +1,6 @@
 ---
 name: walk
-description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class. Use it to make the public walk repository that students fork, PROJECT-walk, and to refresh it without the private cues. Use it to make the teacher's handout and the students' PDF.
+description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class. Use it to make the public walk repository that students fork, PROJECT-walk, and to refresh it without the private cues. Use it to make the PDF of the slides.
 ---
 
 # walk: a class that replays a project, step by step
@@ -53,9 +53,11 @@ The project must have its step tags on GitHub. `git push origin main --tags` put
 4. **Keep the walk repository up to date.** In the class folder, run `just walk-update`. It copies
    `slides/` when there is a `slides/slides.toml`. Add `--pdf` to ship `bla.pdf`. It shows the diff, and commits on a yes. It never pushes.
 
-5. **Make the PDFs** in the class folder. They go into `build/`, which git ignores.
-   - `just handout` makes `build/bla-handout.pdf`, with the private cues, for the teacher
-   - `just student-pdf` makes `build/bla-student.pdf`, without them, to give to students
+5. **Make the PDF** in the class folder. It goes into `build/`, which git ignores.
+   - `just pdf` makes `build/bla.pdf`: the slides, one page each, for the teacher and for the students. The
+     notes are not in it. They are for the step browser, `just present`. A slide that is long is shrunk to
+     fit its page
+   - `just check-pdf` checks that no slide is cut off: the last words of every slide must be in the PDF's text
 
 ## The private lines
 

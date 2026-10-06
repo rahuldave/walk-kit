@@ -45,10 +45,9 @@ setup url="":
     git -C repo fetch --quiet --tags --force upstream
     echo "setup: repo/ is $(git -C repo remote get-url origin), with $(git -C repo tag -l 'step-*' | wc -l | tr -d ' ') steps from {{ upstream }}/{{ project }}"
 
-# Make walk.pdf: the slides, if there are any, with the notes of every step after them
+# Make walk.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it
 pdf:
     #!/usr/bin/env bash
     set -euo pipefail
-    slides=()
-    if [ -f slides/slides.toml ]; then slides=(slides/slides.toml); fi
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf ${slides[@]+"${slides[@]}"} --notes walk.md --with-notes --title "{{ project }}" -o walk.pdf
+    test -f slides/slides.toml || { echo "pdf: this walk has no slides; the notes are for the step browser: just present" >&2; exit 1; }
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes walk.md --title "{{ project }}" -o walk.pdf

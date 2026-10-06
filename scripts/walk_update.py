@@ -2,7 +2,7 @@
 
     python3 walk_update.py --project bla --notes notes.md --walk ~/Projects/bla-walk
     python3 walk_update.py ... --slides slides         also copy the slides folder and its manifest
-    python3 walk_update.py ... --pdf                   also ship bla.pdf, the walk as written
+    python3 walk_update.py ... --pdf                   also ship bla.pdf, the slides, one page each; no notes
     python3 walk_update.py ... --no-commit             write and show, and do not ask to commit
 
 walk.md is the walk's preamble, then the class notes from their first `## ` heading on, without the
@@ -49,10 +49,11 @@ def main() -> int:  # The exit code
         shutil.copytree(args.slides, walk / "slides")
         print("walk-update: copied the slides and their manifest into slides/")
     if args.pdf:
-        manifest = ["slides/slides.toml"] if (walk / "slides" / "slides.toml").exists() else []
-        out = f"{args.project}.pdf"
-        run(*UVX, args.timewalk, "timewalk-pdf", *manifest, "--notes", "walk.md",
-            "--with-notes", "--title", args.project, "-o", out, cwd=walk)
+        if (walk / "slides" / "slides.toml").exists():
+            run(*UVX, args.timewalk, "timewalk-pdf", "slides/slides.toml", "--notes", "walk.md",
+                "--title", args.project, "-o", f"{args.project}.pdf", cwd=walk)
+        else:
+            print("walk-update: there are no slides, so there is no PDF: the notes are for the step browser")
     run("git", "add", "-A", cwd=walk)
     if subprocess.run(["git", "-C", str(walk), "diff", "--cached", "--quiet"]).returncode == 0:
         print(f"walk-update: {walk.name} has no changes")
