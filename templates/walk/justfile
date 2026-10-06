@@ -44,10 +44,20 @@ setup url="":
     fi
     git -C repo fetch --quiet --tags --force upstream
     echo "setup: repo/ is $(git -C repo remote get-url origin), with $(git -C repo tag -l 'step-*' | wc -l | tr -d ' ') steps from {{ upstream }}/{{ project }}"
+    # The project's `just docs` needs Quarto 1.4 or newer: an older one fails on its sidebar
+    if command -v quarto >/dev/null 2>&1; then
+        have="$(quarto --version)"
+        if [ "$(printf '%s\n' 1.4 "$have" | sort -V | head -1)" != 1.4 ]; then
+            echo "setup: Quarto $have is older than 1.4, and just docs needs 1.4 or newer: https://quarto.org/docs/get-started/"
+        fi
+    else
+        echo "setup: Quarto is not on this machine; just docs needs it: https://quarto.org/docs/get-started/"
+    fi
 
-# Make walk.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it
+# Make build/walk.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it
 pdf:
     #!/usr/bin/env bash
     set -euo pipefail
     test -f slides/slides.toml || { echo "pdf: this walk has no slides; the notes are for the step browser: just present" >&2; exit 1; }
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes walk.md --title "{{ project }}" -o walk.pdf
+    mkdir -p build
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes walk.md --title "{{ project }}" -o build/walk.pdf

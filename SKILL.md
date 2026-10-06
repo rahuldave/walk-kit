@@ -69,8 +69,8 @@ included. To show a cue to students, start it with another word, for example `> 
 
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Rehearse every command** of the notes at its step in the replay copy before it goes into the notes.
-- **Never write `walk.pdf` in a walk repository.** It is the student's own PDF, and its `.gitignore`
-  lists it.
+- **Never write `build/walk.pdf` in a walk repository.** It is the student's own PDF, and its `.gitignore`
+  lists `build/`.
 - **Keep paths out of the class justfile.** It finds the project as `../PROJECT` and the walk repository
   as `../PROJECT-walk`. `PROJECT_DIR` and `WALK_DIR` name other folders for one machine.
 - **Do not copy the scripts** into a class folder. The class justfile calls them here, through

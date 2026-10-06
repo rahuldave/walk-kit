@@ -7,5 +7,5 @@ forks it, runs `just present`, and opens the address that timewalk prints.
 - `repo/` is a clone of the project, and `worktree/` is timewalk's replay copy. Git ignores both.
 - Work in `repo/` on `main`, and push to the student's own fork of the project. A move between steps
   throws away edits in `worktree/`.
-- `just pdf` makes `walk.pdf`, the slides, one page each. The notes are not in it. Git ignores it.
+- `just pdf` makes `build/walk.pdf`, the slides, one page each. The notes are not in it. Git ignores it.
 - Do not change `justfile` or `.gitignore` for one student's needs. The teacher's class material makes them.

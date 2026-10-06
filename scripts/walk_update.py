@@ -6,7 +6,7 @@
     python3 walk_update.py ... --no-commit             write and show, and do not ask to commit
 
 walk.md is the walk's preamble, then the class notes from their first `## ` heading on, without the
-private lines that `private.py` names. The script never writes walk.pdf, the student's own PDF. It never
+private lines that `private.py` names. The script never writes build/walk.pdf, the student's own PDF. It never
 pushes: it prints the command that does.
 """
 

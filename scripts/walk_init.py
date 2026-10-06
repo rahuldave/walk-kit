@@ -3,7 +3,7 @@
     python3 walk_init.py --project bla --upstream owner --walk ~/Projects/bla-walk
     python3 walk_init.py ... --no-github        make it on this machine only
 
-It holds a justfile (present, setup, pdf), a .gitignore (repo/, worktree/, walk.pdf), a README, an
+It holds a justfile (present, setup, pdf), a .gitignore (repo/, worktree/, build/), a README, an
 AGENTS.md with a CLAUDE.md that reads it, and walk.md with only its preamble: `walk_update.py` fills it
 from the class notes. The script commits the files, then asks before it creates the public repository
 OWNER/PROJECT-walk on GitHub and pushes to it.
