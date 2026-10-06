@@ -35,8 +35,12 @@ def walk_text(
     project: str,  # The project's name, for the title
 ) -> str:  # The notes for students: the walk's preamble, then the steps without the private lines
     """Make the students' notes from the class notes."""
-    start = notes.find("\n## ")
-    body = notes[start + 1 :] if start >= 0 else ""
+    # The class notes may begin with the first step's heading, so a heading at the very start counts too
+    if notes.startswith("## "):
+        body = notes
+    else:
+        start = notes.find("\n## ")
+        body = notes[start + 1 :] if start >= 0 else ""
     return fill("walk/walk-preamble.md", {"project": project}) + public(body)
 
 
