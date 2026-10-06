@@ -57,13 +57,16 @@ present *args: setup
     if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
     uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
 
-# Make the PDF, build/PROJECT.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it
+# Make the PDF, build/PROJECT.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it.
+# BRAND=brand/NAME just pdf gives it the look of a brand folder: a brand.toml, a logo and fonts. Without BRAND, no brand
 pdf:
     #!/usr/bin/env bash
     set -euo pipefail
     test -f slides/slides.toml || { echo "pdf: there are no slides; the notes are for the step browser: just present" >&2; exit 1; }
     mkdir -p build
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes notes.md --title "{{ project }}" -o "build/{{ project }}.pdf"
+    brand=()
+    if [ -n "${BRAND:-}" ]; then test -e "$BRAND" || { echo "pdf: BRAND=$BRAND does not exist" >&2; exit 1; }; brand=(--brand "$BRAND"); fi
+    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes notes.md --title "{{ project }}" ${brand[@]+"${brand[@]}"} -o "build/{{ project }}.pdf"
 
 # Check that no slide is cut off in the PDF: the last words of every slide must be in its text
 check-pdf:

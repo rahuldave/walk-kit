@@ -50,6 +50,7 @@ just walk-init          # make bla-walk, the repository that students fork
 just walk-update        # refresh bla-walk from notes.md and slides/
 just present            # open the walk, with your notes and the clock
 just pdf                # build/bla.pdf: the slides, one page each. The notes are for the step browser
+BRAND=brand/x just pdf  # the same, with the look of the brand folder brand/x: font, colours, cover, dividers
 just check-pdf          # check that no slide is cut off in it
 ```
 

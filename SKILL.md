@@ -57,6 +57,9 @@ The project must have its step tags on GitHub. `git push origin main --tags` put
    - `just pdf` makes `build/bla.pdf`: the slides, one page each, for the teacher and for the students. The
      notes are not in it. They are for the step browser, `just present`. A slide that is long is shrunk to
      fit its page
+   - `BRAND=brand/NAME just pdf` gives the PDF the look of a brand: a folder in the class folder with a `brand.toml`,
+     a logo and fonts. A class can keep several. Without `BRAND`, the PDF has no brand. The keys are in timewalk's
+     docs, https://rahuldave.com/timewalk/brand.html
    - `just check-pdf` checks that no slide is cut off: the last words of every slide must be in the PDF's text
 
 ## The private lines
