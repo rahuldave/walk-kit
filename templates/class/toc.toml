@@ -1,0 +1,25 @@
+# The walks of the @project@ class. The first walk is the default: `just present` opens it, and `just present ID`
+# opens another. Every path is read from this folder. WALKS.md in the walk skill says how to add a walk, and
+# https://rahuldave.com/timewalk/walks.html#the-table-of-contents lists every key.
+
+[[walk]]
+id = "story"
+title = "@project@, step by step"
+description = "How @project@ was built, one tagged step at a time."
+kind = "narrative"                # the tagged steps, and nothing between them
+notes = "notes.md"
+# Rename slides/slides.example.toml to slides.toml, and take out the #, once it gives every step a slide.
+# timewalk does not start on a manifest that misses a step
+# slides = "slides/slides.toml"
+
+# A tutorial: the tagged steps, and the small commits step-NN.k between them. Take out the # of each line, and make the
+# folder walks/tutorial. Then `just draft tutorial --write` makes its notes.md, with a section for each step and a draft
+# for each move. Add walks/tutorial/slides/slides.toml only once it gives every step a slide.
+#
+# [[walk]]
+# id = "tutorial"
+# title = "@project@, one move at a time"
+# description = "Build @project@ yourself, one small commit at a time."
+# kind = "tutorial"
+# folder = "walks/tutorial"       # its notes.md, and slides/slides.toml
+# moves = "do"                    # "do": the learner makes each move by hand. "watch": Show checks out each move

@@ -1,10 +1,11 @@
 """Check that no slide is cut off in a PDF made from a class folder.
 
-    python3 pdf_check.py build/PROJECT.pdf [--class DIR] [--words N]
+    python3 pdf_check.py build/PROJECT.pdf [--class DIR] [--walk ID] [--words N]
 
 Slides that scroll on the screen are shrunk or split when they become pages. This takes each Markdown slide
 in `DIR/slides/slides.toml` (default: the current folder), reads the last words of its last line of text,
-and looks for them in the text of the PDF. A slide whose last words are missing is reported: look at its page.
+and looks for them in the text of the PDF. When DIR has a toc.toml, the manifest is that of the walk
+that --walk names, or of the first walk. A slide whose last words are missing is reported: look at its page.
 It also prints the number of pages and their sizes, so that a PDF with mixed page sizes shows.
 
 A slide that is only a picture has no text to look for, and is skipped. The text is read in the order it was drawn
@@ -86,18 +87,33 @@ def slides_of(slides_dir: Path, entry: str) -> list[str]:
 def main() -> int:
     "Check the PDF named on the command line. The exit code is 1 when a slide's last words are missing."
     args = sys.argv[1:]
-    options = {a: args[i + 1] for i, a in enumerate(args) if a in ("--class", "--words")}
+    options = {a: args[i + 1] for i, a in enumerate(args) if a in ("--class", "--walk", "--words")}
     pdf = next(a for i, a in enumerate(args) if not a.startswith("--") and (i == 0 or args[i - 1] not in options))
     root = Path(options.get("--class", ".")).expanduser()
     n = int(options.get("--words", 6))
-    slides_dir = root / "slides"
+    manifest_path = root / "slides" / "slides.toml"
+    if (root / "toc.toml").exists():
+        from common import TocError, manifest_of
+
+        try:
+            manifest_path = manifest_of(root / "toc.toml", options.get("--walk"))
+        except TocError as error:
+            print(f"pdf_check: {error}", file=sys.stderr)
+            return 2
+    elif "--walk" in options:
+        print(f"pdf_check: {root} has no toc.toml, so it has one walk", file=sys.stderr)
+        return 2
+    slides_dir = manifest_path.parent
+    if not Path(pdf).is_file():
+        print(f"pdf_check: there is no {pdf}; just pdf makes it", file=sys.stderr)
+        return 2
     text = subprocess.run(["pdftotext", "-raw", pdf, "-"], capture_output=True, text=True, check=True).stdout
     flat = squash(text).replace(" ", "")      # the PDF's text is not Markdown or HTML: no tag stripping
-    info = subprocess.run(["pdfinfo", "-f", "1", "-l", "99999", pdf], capture_output=True, text=True).stdout
+    info = subprocess.run(["pdfinfo", "-f", "1", "-l", "99999", pdf], capture_output=True, text=True, check=False).stdout
     sizes = sorted(set(re.findall(r"Page\s+\d+ size:\s+([\d.]+ x [\d.]+) pts", info)))
     pages = re.search(r"Pages:\s+(\d+)", info)
     print(f"{pdf}: {pages.group(1) if pages else '?'} pages; page sizes: {sizes}")
-    manifest = load_manifest(slides_dir / "slides.toml")
+    manifest = load_manifest(manifest_path)
     checked = missing = 0
     for step, entries in manifest.items():
         for entry in entries:

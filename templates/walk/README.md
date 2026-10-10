@@ -28,19 +28,31 @@ just present
 also forked @project@, it clones your fork, so that you can push your own work. Otherwise it clones
 `@upstream@/@project@`. Every time, it fetches the tags of the steps from `@upstream@/@project@`.
 
-timewalk then puts its replay copy in `worktree/`. The replay copy is a second working folder of the
-same repository, which timewalk moves from step to step. Git ignores both folders, so they never enter
-your fork. To clone from another address, run `just setup url=<address>` before the first `just present`.
+timewalk then puts its replay copy in `worktree/`. The replay copy is a clone of `repo/` on the branch
+`timewalk/replay`, which timewalk moves from step to step. timewalk never writes to `repo/`. Git ignores
+both folders, so they never enter your fork. To clone from another address, run `just setup <address>` before the first `just present`.
 
 ## The folders
 
 ```
 @project@-walk/
 ├── walk.md        the notes of every step, tracked in your fork
+├── toc.toml       only with several walks: the list of walks, and where the notes of each are
 ├── justfile       the recipes: present, setup, pdf
 ├── repo/          ignored: your clone of @project@
 └── worktree/      ignored: the replay copy
 ```
+
+## Several walks
+
+If this repository has a `toc.toml`, it has several walks. `just present` opens the first, and
+`just present ID` opens the walk with that id. The menu at the left of the step bar changes the walk.
+
+A walk is a narrative or a tutorial. A narrative goes from step to step. A tutorial also has moves, the
+small commits between two steps. In do mode, you make each move by hand from its notes, run the command at
+its end, and press **Done**. **Catch me up** sets the code to the end of the move. In watch mode, **Show**
+checks out each move. The moves of a step go in order. To go back, press **Restart step**, and then run
+`just setup`.
 
 ## The page
 
@@ -49,8 +61,14 @@ your fork. To clone from another address, run `just setup url=<address>` before 
   **run on click**.
 - **Edit** at the top of the notes column changes the notes of the step in `walk.md`. Commit `walk.md`
   to your fork to keep your notes.
-- **At this step** and **Runs** are terminals in `worktree/`, at the step. timewalk starts with
-  `--discard-edits`, so a move to another step throws away your edits there.
+- **At this step** and **Runs** are terminals in `worktree/`, at the step. The notes of each step start
+  with `$ just setup`. That is the project's own recipe, run at the step: it makes the environment of
+  the step. It is not the `just setup` of this repository.
+- **A move keeps your work.** Before a move to another step, timewalk keeps your edits and commits in
+  `worktree/` on a branch `timewalk/saved/<step>`, and does not ask. The page names the branch, and gives
+  the command that brings a file back. A `worktree/` from an older timewalk is a git worktree, and there a move
+  with edits asks and stashes them. To change it, keep what you need from `worktree/`, delete the folder, run
+  `git -C repo worktree prune`, and run `just present` again.
 - **Main** is a terminal in `repo/`, your clone of @project@. A move never touches it. Work there on
   `main`, commit, and push to your own fork.
 - **PDF** makes a PDF of the slides, one page each. The notes are not in it: they are for this page. `just pdf` makes

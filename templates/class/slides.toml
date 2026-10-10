@@ -1,5 +1,8 @@
 # Which slides are shown at which step of @project@.
 #
+# Rename this file to slides.toml once it has a line for every step. A manifest that misses a step is an
+# error in `just check`, and with toc.toml timewalk does not start. Without slides.toml, the walk has no slides.
+#
 # Each line is:  step-name = [ slides, in the order they are shown ]
 #
 #   "intro.md"        every slide in slides/intro.md

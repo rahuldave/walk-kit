@@ -4,6 +4,9 @@
 #
 # The project and the walk repository are found beside this folder, as ../@project@ and ../@project@-walk,
 # unless PROJECT_DIR and WALK_DIR name other folders. WALK_SKILL names the skill, if it is not in ~/.agents/skills.
+#
+# A class has one walk, notes.md and slides/, or several, listed in toc.toml. With toc.toml, a recipe that takes
+# an ID uses the walk with that id, and the first walk without one.
 
 project := "@project@"
 upstream := "@upstream@"
@@ -13,6 +16,9 @@ repo := env("PROJECT_DIR", @repo_default@)
 walk := env("WALK_DIR", @walk_default@)
 skill := env("WALK_SKILL", home_directory() / ".agents/skills/walk")
 
+# Recipes get their arguments as "$1", "$@": a word with a space or a quote stays one word
+set positional-arguments
+
 [private]
 default:
     @just --list --unsorted
@@ -21,6 +27,7 @@ default:
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
+    repo={{ quote(repo) }} walk={{ quote(walk) }} skill={{ quote(skill) }}
     export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes"
     for tool in uv git python3; do
         command -v "$tool" > /dev/null || { echo "setup: $tool is not on this machine" >&2; exit 1; }
@@ -31,62 +38,113 @@ setup:
         git clone --quiet "git@github.com:{{ upstream }}/$1.git" "$2" 2> /dev/null \
             || git clone --quiet "https://github.com/{{ upstream }}/$1.git" "$2"
     }
-    if [ ! -d "{{ repo }}/.git" ]; then clone "{{ project }}" "{{ repo }}"; fi
-    echo "setup: the project is {{ repo }}, with $(git -C "{{ repo }}" tag -l 'step-*' | wc -l | tr -d ' ') steps"
-    if [ ! -d "{{ walk }}/.git" ]; then
+    if [ ! -d "$repo/.git" ]; then clone "{{ project }}" "$repo"; fi
+    echo "setup: the project is $repo, with $(git -C "$repo" tag -l 'step-*' | wc -l | tr -d ' ') steps"
+    if [ ! -d "$walk/.git" ]; then
         if git ls-remote --exit-code "https://github.com/{{ upstream }}/{{ project }}-walk.git" HEAD > /dev/null 2>&1; then
-            clone "{{ project }}-walk" "{{ walk }}"
+            clone "{{ project }}-walk" "$walk"
         else
             echo "setup: there is no @project@-walk yet; just walk-init makes it"
         fi
     fi
-    if [ -d "{{ walk }}/.git" ]; then echo "setup: the walk repository is {{ walk }}"; fi
-    if [ -f "{{ skill }}/scripts/common.py" ]; then
-        echo "setup: the walk skill is {{ skill }}"
+    if [ -d "$walk/.git" ]; then echo "setup: the walk repository is $walk"; fi
+    if [ -f "$skill/scripts/common.py" ]; then
+        echo "setup: the walk skill is $skill"
     else
         echo "setup: the walk skill is not installed. walk-init, walk-update and check-pdf need it. Install it with:"
         echo "  git clone https://github.com/rahuldave/walk-kit ~/Projects/walk-kit"
         echo "  mkdir -p ~/.agents/skills && ln -s ~/Projects/walk-kit ~/.agents/skills/walk"
     fi
 
-# Open the walk on the project with these notes and slides, the clock on. Prints the address to open
+# Open the walk on the project, the clock on: just present, or just present ID for another walk. Prints the address to open
 present *args: setup
     #!/usr/bin/env bash
     set -euo pipefail
-    slides=()
-    if [ -f slides/slides.toml ]; then slides=(--slides slides/slides.toml); fi
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk "{{ repo }}" --notes notes.md ${slides[@]+"${slides[@]}"} --discard-edits --clock {{ args }}
+    if [ -f toc.toml ]; then
+        source=(--toc toc.toml)
+        # A first word that is not an option is the id of a walk
+        if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then source+=(--walk "$1"); shift; fi
+    else
+        if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then echo "present: this class has one walk; toc.toml lists several" >&2; exit 1; fi
+        source=(--notes notes.md)
+        if [ -f slides/slides.toml ]; then source+=(--slides slides/slides.toml); fi
+    fi
+    uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk {{ quote(repo) }} "${source[@]}" --clock "$@"
 
-# Make the PDF, build/PROJECT.pdf: the slides, one page each. The notes are for the step browser, `just present`, and are not in it.
-# BRAND=brand/NAME just pdf gives it the look of a brand folder: a brand.toml, a logo and fonts. Without BRAND, no brand
-pdf:
+# Check the notes and slides of every walk against the steps, and a tutorial's moves. With toc.toml, an error stops just present too
+check:
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f slides/slides.toml || { echo "pdf: there are no slides; the notes are for the step browser: just present" >&2; exit 1; }
+    source=(--toc toc.toml)
+    if [ ! -f toc.toml ]; then
+        source=(--notes notes.md)
+        if [ -f slides/slides.toml ]; then source+=(--slides slides/slides.toml); fi
+    fi
+    uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-check {{ quote(repo) }} "${source[@]}"
+
+# Draft the notes of a tutorial's moves from their commits: just draft ID prints them, just draft ID --write adds them
+draft id *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test -f toc.toml || { echo "draft: a tutorial is a walk in toc.toml, and this class has no toc.toml" >&2; exit 1; }
+    id="$1"; shift
+    uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-notes {{ quote(repo) }} --toc toc.toml --walk "$id" "$@"
+
+# Make build/PROJECT.pdf, or build/PROJECT-ID.pdf for just pdf ID: the slides, one page each. BRAND=brand/NAME gives it a brand
+pdf id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The notes are for the step browser, `just present`, and are not in the PDF. A brand is a folder with a brand.toml, a
+    # logo and fonts. Without BRAND, the PDF has no brand
+    id="$1" name="{{ project }}" skill={{ quote(skill) }}
+    if [ -f toc.toml ]; then
+        # The skill says so when the walk has no slides manifest. Exit code 3: this python3 cannot read toc.toml, and timewalk can
+        if [ -f "$skill/scripts/common.py" ]; then
+            code=0; python3 "$skill/scripts/common.py" manifest toc.toml ${id:+"$id"} > /dev/null || code=$?
+            if [ "$code" -ne 0 ] && [ "$code" -ne 3 ]; then exit "$code"; fi
+        fi
+        source=(--toc toc.toml)
+        if [ -n "$id" ]; then source+=(--walk "$id"); name="{{ project }}-$id"; fi
+    else
+        test -z "$id" || { echo "pdf: this class has one walk; toc.toml lists several" >&2; exit 1; }
+        test -f slides/slides.toml || { echo "pdf: there are no slides, slides/slides.toml; the notes are for the step browser: just present" >&2; exit 1; }
+        source=(slides/slides.toml --notes notes.md --title "{{ project }}")
+    fi
     mkdir -p build
     brand=()
     if [ -n "${BRAND:-}" ]; then test -e "$BRAND" || { echo "pdf: BRAND=$BRAND does not exist" >&2; exit 1; }; brand=(--brand "$BRAND"); fi
-    uvx --refresh-package timewalk --from "{{ timewalk }}" timewalk-pdf slides/slides.toml --notes notes.md --title "{{ project }}" ${brand[@]+"${brand[@]}"} -o "build/{{ project }}.pdf"
+    uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-pdf "${source[@]}" ${brand[@]+"${brand[@]}"} -o "build/$name.pdf"
 
-# Check that no slide is cut off in the PDF: the last words of every slide must be in its text
-check-pdf:
+# Check that no slide is cut off in the PDF of just pdf, or of just pdf ID: the last words of every slide must be in its text
+check-pdf id="":
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f "{{ skill }}/scripts/pdf_check.py" || { echo "check-pdf: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    python3 "{{ skill }}/scripts/pdf_check.py" "build/{{ project }}.pdf" --class .
+    skill={{ quote(skill) }} id="$1"
+    test -f "$skill/scripts/pdf_check.py" || { echo "check-pdf: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    if [ -n "$id" ]; then
+        python3 "$skill/scripts/pdf_check.py" "build/{{ project }}-$id.pdf" --class . --walk "$id"
+    else
+        python3 "$skill/scripts/pdf_check.py" "build/{{ project }}.pdf" --class .
+    fi
 
 # Make @project@-walk, the repository that students fork. Asks before it creates the repository on GitHub
 walk-init *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f "{{ skill }}/scripts/common.py" || { echo "walk-init: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    python3 "{{ skill }}/scripts/walk_init.py" --project "{{ project }}" --upstream "{{ upstream }}" --walk "{{ walk }}" {{ args }}
+    skill={{ quote(skill) }}
+    test -f "$skill/scripts/common.py" || { echo "walk-init: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    python3 "$skill/scripts/walk_init.py" --project "{{ project }}" --upstream "{{ upstream }}" --walk {{ quote(walk) }} "$@"
 
-# Refresh @project@-walk from notes.md, without the private cues, and from slides/. Shows the diff, and commits on a yes
+# Refresh @project@-walk from the notes of every walk, without the private cues, and the slides. Shows the diff, and commits on a yes
 walk-update *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f "{{ skill }}/scripts/common.py" || { echo "walk-update: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    slides=()
-    if [ -f slides/slides.toml ]; then slides=(--slides slides); fi
-    python3 "{{ skill }}/scripts/walk_update.py" --project "{{ project }}" --notes notes.md --walk "{{ walk }}" ${slides[@]+"${slides[@]}"} {{ args }}
+    # The walks are notes.md and slides/, or every walk of toc.toml, with toc.toml itself
+    skill={{ quote(skill) }}
+    test -f "$skill/scripts/common.py" || { echo "walk-update: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    source=(--toc toc.toml)
+    if [ ! -f toc.toml ]; then
+        source=(--notes notes.md)
+        if [ -f slides/slides.toml ]; then source+=(--slides slides); fi
+    fi
+    python3 "$skill/scripts/walk_update.py" --project "{{ project }}" --upstream "{{ upstream }}" "${source[@]}" --walk {{ quote(walk) }} --repo {{ quote(repo) }} "$@"

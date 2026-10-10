@@ -2,10 +2,13 @@
 
     python3 class_init.py --project bla --upstream owner --repo ~/Projects/bla --dir ~/Projects/bla-class
     python3 class_init.py ... --no-github        make it on this machine only
+    python3 class_init.py ... --toc              also write toc.toml, to add more walks later
 
 notes.md gets one section for each step tag of the project, `## step-NN Title`, with the first line of
-the tag's note as the title and the rest of the note as a start for the prose. The justfile has setup,
-present, pdf, check-pdf, walk-init and walk-update. It finds the project and the walk
+the tag's note as the title and the rest of the note as a start for the prose. slides/slides.example.toml shows
+the manifest of the slides: rename it to slides.toml once it has a line for every step. With --toc, toc.toml lists
+that walk, a narrative, and shows how to add another, a tutorial say. The justfile has setup, present, check, draft,
+pdf, check-pdf, walk-init and walk-update, and works with toc.toml and without it. It finds the project and the walk
 repository beside the class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
 creates the private repository OWNER/PROJECT-class on GitHub and pushes to it.
 """
@@ -23,7 +26,7 @@ FILES = {  # the class repository's file: its template
     "README.md": "class/README.md",
     "AGENTS.md": "class/AGENTS.md",
     "CLAUDE.md": "CLAUDE.md",
-    "slides/slides.toml": "class/slides.toml",
+    "slides/slides.example.toml": "class/slides.toml",  # slides.toml once it has every step
 }
 
 
@@ -73,6 +76,7 @@ def main() -> int:  # The exit code
     parser.add_argument("--dir", required=True, type=Path, help="the folder of the new class material")
     parser.add_argument("--walk", type=Path, help="the walk repository (default: PROJECT-walk beside --dir)")
     parser.add_argument("--timewalk", default=GITHUB, help=f"where the justfile gets timewalk (default: {GITHUB})")
+    parser.add_argument("--toc", action="store_true", help="also write toc.toml, a table of contents for several walks")
     parser.add_argument("--no-github", action="store_true", help="do not create a repository on GitHub")
     args = parser.parse_args()
     folder = args.dir.expanduser().resolve()
@@ -94,6 +98,8 @@ def main() -> int:  # The exit code
     for name, template in FILES.items():
         (folder / name).write_text(fill(template, values), encoding="utf-8")
     (folder / "notes.md").write_text(notes_text(args.project, repo), encoding="utf-8")
+    if args.toc:
+        (folder / "toc.toml").write_text(fill("class/toc.toml", values), encoding="utf-8")
     print(f"class-init: wrote {folder}, with {len(steps(repo))} steps in notes.md")
     run("git", "init", "--quiet", "--initial-branch=main", cwd=folder)
     run("git", "add", "-A", cwd=folder)
