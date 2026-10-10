@@ -7,7 +7,7 @@
 notes.md gets one section for each step tag of the project, `## step-NN Title`, with the first line of
 the tag's note as the title and the rest of the note as a start for the prose. slides/slides.example.toml shows
 the manifest of the slides: rename it to slides.toml once it has a line for every step. With --toc, toc.toml lists
-that walk, a narrative, and shows how to add another, a tutorial say. The justfile has setup, present, check, draft,
+that walk, a narrative, and shows how to add another, a tutorial say. The justfile has setup, present, check, style, draft,
 pdf, check-pdf, walk-init and walk-update, and works with toc.toml and without it. It finds the project and the walk
 repository beside the class folder, so a clone on another machine finds them too, after `just setup`. The script commits the files, then asks before it
 creates the private repository OWNER/PROJECT-class on GitHub and pushes to it.

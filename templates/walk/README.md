@@ -49,7 +49,9 @@ If this repository has a `toc.toml`, it has several walks. `just present` opens 
 `just present ID` opens the walk with that id. The menu at the left of the step bar changes the walk.
 
 A walk is a narrative or a tutorial. A narrative goes from step to step. A tutorial also has moves, the
-small commits between two steps. In do mode, you make each move by hand from its notes, run the command at
+small commits between two steps.
+
+In do mode, you make each move by hand from its notes, run the command at
 its end, and press **Done**. **Catch me up** sets the code to the end of the move. In watch mode, **Show**
 checks out each move. The moves of a step go in order. To go back, press **Restart step**, and then run
 `just setup`.
@@ -62,8 +64,8 @@ checks out each move. The moves of a step go in order. To go back, press **Resta
 - **Edit** at the top of the notes column changes the notes of the step in `walk.md`. Commit `walk.md`
   to your fork to keep your notes.
 - **At this step** and **Runs** are terminals in `worktree/`, at the step. The notes of each step start
-  with `$ just setup`. That is the project's own recipe, run at the step: it makes the environment of
-  the step. It is not the `just setup` of this repository.
+  with `$ just setup`. The command runs the project's own recipe, at the step, and makes the environment
+  of the step. It is not the `just setup` of this repository.
 - **A move keeps your work.** Before a move to another step, timewalk keeps your edits and commits in
   `worktree/` on a branch `timewalk/saved/<step>`, and does not ask. The page names the branch, and gives
   the command that brings a file back. A `worktree/` from an older timewalk is a git worktree, and there a move
@@ -71,7 +73,6 @@ checks out each move. The moves of a step go in order. To go back, press **Resta
   `git -C repo worktree prune`, and run `just present` again.
 - **Main** is a terminal in `repo/`, your clone of @project@. A move never touches it. Work there on
   `main`, commit, and push to your own fork.
-- **PDF** makes a PDF of the slides, one page each. The notes are not in it: they are for this page. `just pdf` makes
-  the same file, `build/walk.pdf`. Git
-  ignores `build/`, so your own PDF never changes your fork. This repository may also ship `@project@.pdf`, the
-  PDF of the walk as written.
+- **PDF** makes a PDF of the slides, one page each. The notes are not in it. They are for this page. `just pdf`
+  makes the same file, `build/walk.pdf`. Git ignores `build/`, so your own PDF never changes your fork. This
+  repository may also ship `@project@.pdf`, the PDF of the walk as written.

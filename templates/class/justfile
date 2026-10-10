@@ -1,5 +1,5 @@
 # The class material for @project@: the notes with your private cues, the slides, and the recipes that use
-# them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind walk-init,
+# them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind style, walk-init,
 # walk-update and check-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
 #
 # The project and the walk repository are found beside this folder, as ../@project@ and ../@project@-walk,
@@ -51,7 +51,7 @@ setup:
     if [ -f "$skill/scripts/common.py" ]; then
         echo "setup: the walk skill is $skill"
     else
-        echo "setup: the walk skill is not installed. walk-init, walk-update and check-pdf need it. Install it with:"
+        echo "setup: the walk skill is not installed. style, walk-init, walk-update and check-pdf need it. Install it with:"
         echo "  git clone https://github.com/rahuldave/walk-kit ~/Projects/walk-kit"
         echo "  mkdir -p ~/.agents/skills && ln -s ~/Projects/walk-kit ~/.agents/skills/walk"
     fi
@@ -81,6 +81,14 @@ check:
         if [ -f slides/slides.toml ]; then source+=(--slides slides/slides.toml); fi
     fi
     uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-check {{ quote(repo) }} "${source[@]}"
+
+# Check the prose of the class against the walk skill's writing guide. The skill's scripts/style.py says which files. -v also shows the soft notes
+style *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    skill={{ quote(skill) }}
+    test -f "$skill/scripts/style.py" || { echo "style: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    python3 "$skill/scripts/style.py" --class . "$@"
 
 # Draft the notes of a tutorial's moves from their commits: just draft ID prints them, just draft ID --write adds them
 draft id *args:

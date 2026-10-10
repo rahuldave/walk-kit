@@ -13,4 +13,6 @@ walk-kit is a skill (`SKILL.md`) and the scripts behind it. Read `SKILL.md` and 
 - **Ask before** a commit, a push, or a repository on GitHub. The scripts ask too.
 - **Test a change** with a throwaway project. Run `class_init.py` and `walk_init.py` with `--no-github`
   in a temporary folder, and then delete the folder.
-- **Write documentation** in short sentences, with one term for one thing, and no dashes.
+- **Write by the guide.** Every Markdown file and template follows `style/GUIDE.md`, the nossaifd writing guide.
+  Check them with `python3 style/check.py README.md SKILL.md WALKS.md AGENTS.md style/README.md templates/*/*.md`,
+  and fix every hard problem.

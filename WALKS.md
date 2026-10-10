@@ -47,10 +47,10 @@ every window. The key `moves` in `toc.toml` sets the mode that the walk starts i
 - **Watch mode,** `moves = "watch"`. **Show** checks out the commit of each move. The learner reads the
   change, and runs the command at the end of its section.
 
-In both modes, the moves of a step go in order. A move has no `just setup` of its own: it builds on what
+In both modes, the moves of a step go in order. A move has no `just setup` of its own. It builds on what
 the moves before it did. So the only way back is the step's **Start**, or **Restart step** in the notes,
-and then `just setup`. Whole steps can be visited in any order, because each tag is complete, and its
-`just setup` makes all that the step needs.
+and then `just setup`. The class can visit whole steps in any order, because each tag is complete. The
+`just setup` of a step makes all that the step needs.
 
 ## What timewalk does to git
 
@@ -105,23 +105,25 @@ To add walks to a class:
    place of `@project@`.
 2. Make a folder `walks/ID/` for each walk after the first, with its `notes.md`. Add its
    `slides/slides.toml` only when the manifest gives every step a slide.
-   For a tutorial, run `just draft ID --write`. It makes the walk's `notes.md` if the folder has none, with a
-   section `## step-NN Title` for each step, the title from the tag's message, and a draft section for each
-   move. Then write each section by hand.
+   For a tutorial, run `just draft ID --write`. If the folder has no `notes.md`, it makes one. The file has a
+   section `## step-NN Title` for each step, with the title from the tag's message, and a draft section for
+   each move. Then write each section by hand.
 3. Run `just check`.
 
 With `toc.toml`, `just present ID` opens the walk with that id, and `just present` the first one. `just pdf ID`,
 `just check-pdf ID` and `just draft ID` take an id too. `just walk-update` copies `toc.toml`, and the notes
-and slides of every walk, into the walk repository. A walk whose folder has nothing yet gets the folder there
-with an empty `.gitkeep`, because timewalk does not start when a folder of `toc.toml` is missing. When a walk
+and slides of every walk, into the walk repository. A walk whose folder has nothing yet gets the folder there,
+with an empty `.gitkeep`. The folder must be there, because timewalk does not start when a folder of `toc.toml`
+is missing. When a walk
 leaves `toc.toml`, `just walk-update` lists its files in the walk repository, for you to delete.
 
 Every path of `toc.toml` is from its folder, inside the class folder, with no `..`. `just walk-update` refuses
-another, and a path that would take the place of a file of the walk repository: `README.md`, `justfile`,
-`AGENTS.md`, `CLAUDE.md`, `.gitignore`, `toc.toml`, `repo/`, `worktree/` or `build/`. When a class goes back to
-one walk, `just walk-update` removes `toc.toml` from the walk repository, and lists the files of the walks.
-`toc.toml` goes to students as it is, so `just walk-update` refuses a value in it with a private line, such as a
-`description` that starts with `> Say:`.
+another path. It also refuses a path that would take the place of a file of the walk repository. These files are
+`README.md`, `justfile`, `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `toc.toml`, `repo/`, `worktree/` and `build/`.
+
+When a class goes back to one walk, `just walk-update` removes `toc.toml` from the walk repository, and lists the
+files of the walks. `toc.toml` goes to students as it is. So `just walk-update` refuses a value in it with a private
+line, such as a `description` that starts with `> Say:`.
 
 A manifest that misses a step is an error in `just check`. With `toc.toml`, timewalk then does not start.
 So give a walk `slides` only once its manifest has an entry for every step. Without a manifest, the check
@@ -167,25 +169,32 @@ moves". Put `$ just setup` there, and say what the moves do together.
 Then give each move a section `### step-NN.k Title`, in the order of the commits:
 
 - **The instructions** to make the move by hand, with the code to type.
-- **The files changed, as a list of their own.** Never name the changed files inside a sentence of prose:
-  it is hard to follow. Start the list with "These are the files changed:", or "This is the file
-  changed:" for one file. Give each file an item of its own: its path as it is, in code, then what
-  happened to it, in words. `timewalk-notes` drafts the list this way. Put what matters in a sentence
-  after the list:
+- **The files changed, as a list of their own.** Never name the changed files inside a sentence of prose,
+  because a reader cannot follow it. Start the list with "The move changes these files:", or "The move
+  changes one file:" for one file. A step of a narrative says "The step changes these files:", or "The step
+  changes one file:". Give each file an item of its own. The item gives the path as it is, in code, and then
+  what happened to the file, in words. `timewalk-notes` drafts the list this way. Then say in a sentence
+  after the list which change to read first:
 
   ```markdown
-  These are the files changed:
+  The move changes these files:
 
   - `src/tally/__init__.py`: 5 lines added; adds `top`.
   - `tests/test_top.py`: a new file of 8 lines; adds `class Top` and `test_most_common_first`.
 
-  `top` sorts by count, most common first, then by the word.
+  Read `top` in `src/tally/__init__.py` first. It sorts by count, most common first, then by the word.
   ```
-- **A line `files:`, with items.** An item is ``- diff `path`: words`` for the change of the move to a
-  file, or ``- file `path`: words`` for the file itself. The words say what to look for.
-- **A `show:` line under an item,** for example ``show: `for word in text.lower().split():` ``. It quotes
-  the main line of the change. The page draws an excerpt of the real diff there, so no diff is copied
-  into the notes.
+- **A line `files:`, with items.** An item `diff` shows the change of the move to a file. An item `file`
+  shows the file itself. The words of the item say what to look for.
+- **A `show:` line under an item.** It quotes the main line of the change. The page draws an excerpt of the
+  real diff there, so nobody copies a diff into the notes:
+
+  ```markdown
+  files:
+  - diff `src/tally/__init__.py`: the loop that counts
+    show: `for word in text.lower().split():`
+  - file `tests/test_top.py`: the whole test
+  ```
 - **The command that shows what the move did, at the end.** It is the anchor of the move. Make it safe
   to run again, and say what it gives. A test that fails is a good anchor, if the notes say so.
 
@@ -203,8 +212,8 @@ See https://rahuldave.com/timewalk/notes.html and https://rahuldave.com/timewalk
   with a path from its own folder, for example `../../../slides/talk.md#3`.
 - **Keep the manifest in a folder of its own, such as `slides/`.** `just walk-update` copies the folder of each
   manifest whole. It refuses a manifest in the class folder itself, or in a folder that holds notes, because
-  the notes there have the private lines. It also refuses a slide with a private line, such as `> Say:`, a
-  symbolic link, and a PDF that is not the file of an entry of the manifest.
+  the notes there have the private lines. It also refuses a slide with a private line, such as `> Say:`. It
+  refuses a symbolic link, and a PDF that is not the file of an entry of the manifest.
 
 ## Check a class
 
@@ -214,11 +223,16 @@ Run these in the class folder, in this order:
    steps. In a tutorial, it also checks the move sections, and each item and `show:` line against the
    change of its move. An error stops `just present` too. Read every warning.
 2. **`just draft ID`** runs `timewalk-notes` on a tutorial. It prints a draft section for each move that
-   the notes do not have. `just draft ID --write` adds them to the notes. Finish each draft by hand: the
-   instructions, the words of each item, the `show:` lines and the anchor. Then run `just check` again.
-3. **Run every command of the notes at its commit:** a narrative's at its tag, a tutorial's before its
-   first move at the tag before the step, and a move's at the commit of the move. Compare each exit code
-   with what the notes say. The method is in
+   the notes do not have. `just draft ID --write` adds them to the notes. Finish each draft by hand.
+   Write the instructions, the words of each item, the `show:` lines and the anchor. Then run `just check`
+   again.
+3. **Run every command of the notes at its commit.**
+   - Run a command of a narrative at its tag.
+   - Run a command of a tutorial before its first move at the tag before the step.
+   - Run a command of a move at the commit of the move.
+
+   Compare each exit code with what the notes say. The method is in
    https://rahuldave.com/timewalk/authoring.html#run-the-commands-of-a-walk.
-4. **`just present`,** and open two windows: yours, and the **Room** window that its button opens. Go
-   through every walk, step and move, in do mode and in watch mode.
+4. **`just present`,** and open two windows. One is yours, and one is the **Room** window that its button
+   opens. Go through every walk, step and move, in do mode and in watch mode.
+5. **`just style`** checks the prose of the class against the writing guide. Fix every hard problem.
