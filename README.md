@@ -95,14 +95,15 @@ You edit everything in `bla-class`, and never in `bla` or `bla-walk`.
 
 timewalk's documentation describes the [notes](https://rahuldave.com/timewalk/notes.html), the
 [slides](https://rahuldave.com/timewalk/slides.html), the [page](https://rahuldave.com/timewalk/page.html),
-and [several walks](https://rahuldave.com/timewalk/walks.html).
+and [several walks](https://rahuldave.com/timewalk/walks.html). The pages on walks, `walks.html`, `build-walks.html`,
+`authoring.html` and `git.html`, arrive with the next release of timewalk. Until then, those links give a page that
+is not found.
 
 ## The version of timewalk
 
 timewalk is not pinned. Every recipe and script runs the newest commit of timewalk on GitHub, and fetches
-it again at each start, which takes about a second. `scripts/common.py` names the source. On the branch
-`walks` of walk-kit, it is timewalk's branch `walks`. To run another copy, for example a working copy that
-you are changing, set `TIMEWALK` to its folder:
+it again at each start, which takes about a second. `scripts/common.py` names the source, and says why. To run
+another copy, for example a working copy that you are changing, set `TIMEWALK` to its folder:
 
 ```
 TIMEWALK=~/Projects/timewalk just present
@@ -113,7 +114,8 @@ TIMEWALK=~/Projects/timewalk just present
 timewalk shows every line of a notes file. So the notes that students get leave out your private lines. These
 lines are private, also when they are indented:
 
-- a line that starts with `> Say:` or `> Note:`, in any case and with emphasis too, such as `> **Say:**`
+- a line that starts with `> Say:` or `> Note:`, in any case and with emphasis too, such as `> **Say:**`. Spaces
+  before the colon, list markers before the `>` and a task box, as in `- [ ] > Say:`, change nothing
 - a planned time, `time: m:ss`
 - the whole blockquote of a cue, up to a blank line. The blockquote has every `>` line around the cue, a line of
   `>` alone, and the lines that go on without a `>`
@@ -123,7 +125,10 @@ blank line between the two. When a cue sits in an HTML comment, its `-->` stays.
 and stays. `scripts/private.py` is the one place that says so.
 
 `just walk-update` writes only into the walk repository. It writes each file as a new file, so it replaces a link
-in the walk repository, and never writes through it. It refuses these:
+in the walk repository, and never writes through it. It stages only the files that it wrote, and its command to undo
+names only those files. It refuses these:
+
+- a walk repository with changes that are not committed. Commit or stash them in the walk repository first
 
 - a walk repository that is the class folder or the project, or that is inside or around either. Any spelling of
   the folder counts, because the disk decides
@@ -131,16 +136,23 @@ in the walk repository, and never writes through it. It refuses these:
 - a path in `toc.toml` that is absolute or has a `..`
 - a path in `toc.toml` that would take the place of a file of the walk repository, such as `README.md` or `repo/`
 - a `toc.toml` with a private line in a value, such as a `description`
+- a `toc.toml` or a `slides.toml` with a comment that is a private line without its `#`, such as `# Say: ...`
 
 It also writes the walk repository's `justfile`, `README.md`, `AGENTS.md`, `CLAUDE.md` and `.gitignore` again from
 the templates of walk-kit. So an old walk repository gets the new recipes. The upstream owner is `--upstream`, which
 the class justfile gives, or else the one that the old `justfile` names. A file that matches no version of the
-template has an edit by hand. `just walk-update` says so, and the diff shows what goes.
+template has an edit by hand. `just walk-update` keeps that file as it is, and says so again before it asks to
+commit. `just walk-update --replace-edited` makes it again from the template.
+
+`just walk-update` also says when the
+walk repository changes its timewalk source. It warns when the class's own justfile takes timewalk from another
+source, or still passes `--discard-edits`. It never writes the class's justfile.
 
 It copies the folder of each slides manifest whole, and nothing else of the class folder. So it refuses a manifest
 in the class folder itself, or in a folder that holds the notes of a walk. It refuses a symbolic link in a slides
 folder or for the notes. It refuses a PDF whose name is not the file of an entry of the manifest, and a slide with a
-private line.
+private line. It cannot read the speaker notes of an HTML deck, or the text of a PDF that the manifest names. Keep
+your cues out of those files.
 
 Before it offers to commit, it checks every file that the commit would take, also those that it did
 not write. A line in fenced code that would be private outside it, such as an example `> Say:`, also stops it. If

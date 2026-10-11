@@ -70,10 +70,19 @@ def prose_files(
             problems.append(str(error))
     else:
         notes, manifests = [folder / "notes.md"], [folder / "slides" / "slides.toml"]
-    files += notes
+    for path in notes:
+        if path.is_file():
+            files.append(path)
+        else:
+            problems.append(f"the notes {path.relative_to(folder)} are missing")
+    root = folder.resolve()
     for manifest in (found for found in manifests if found.is_file()):
         try:
-            files += manifest_files(manifest)
+            for slide in manifest_files(manifest):
+                if slide.resolve().is_relative_to(root):
+                    files.append(slide)
+                else:
+                    problems.append(f"{manifest.relative_to(folder)} names {slide.name}, which is outside the class folder, {slide.resolve()}")
         except ModuleNotFoundError:
             warnings.append(f"{manifest.relative_to(folder)} is TOML, which Python 3.11 or later reads, so its slides are not checked")
         except (OSError, UnicodeDecodeError, ValueError) as error:
@@ -124,9 +133,14 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
     with tempfile.TemporaryDirectory() as scratch:
         copy = Path(scratch) / "page.md"
         for path in files:
-            copy.write_text(blank(path.read_text(encoding="utf-8")), encoding="utf-8")
-            hard, soft = check(copy)
             name = path.relative_to(folder) if path.is_relative_to(folder) else path
+            try:
+                copy.write_text(blank(path.read_text(encoding="utf-8")), encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as error:
+                print(f"style: cannot read {name}: {error}", file=sys.stderr)
+                failed = True
+                continue
+            hard, soft = check(copy)
             print(f"{name}: {len(hard)} hard, {len(soft)} soft")
             for problem in hard:
                 print("  HARD " + problem)

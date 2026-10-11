@@ -6,6 +6,7 @@
     python3 walk_update.py ... --repo ~/Projects/bla   the project: the walk repository must not be in it, or around it
     python3 walk_update.py ... --no-commit             write and show, and do not ask to commit
     python3 walk_update.py ... --upstream owner        the project's owner, for the justfile (default: the one it names)
+    python3 walk_update.py ... --replace-edited        make the files that walk-init wrote again, also those edited by hand
     python3 walk_update.py --project bla --toc toc.toml --walk ~/Projects/bla-walk    a class with several walks
 
 walk.md is the walk's preamble, then the class notes from their first `## ` heading on, without the
@@ -13,7 +14,12 @@ private lines that `private.py` names. With --toc, the walk repository gets toc.
 made the same way at the same path, and each walk's slides folder. walk.md then goes: the notes of the first walk
 are where toc.toml names them. Without --toc, a toc.toml of an earlier update goes, since the walk's justfile
 reads it first. The files that walk-init writes, but walk.md, are written again from the templates, so that an old walk
-repository gets the new recipes. A file that matches no version of its template was edited by hand: the script says so.
+repository gets the new recipes. A file that matches no version of its template was edited by hand, and stays as it is
+unless --replace-edited is given. The script says so again before it asks to commit, with a change of the timewalk source
+and a class justfile that takes timewalk from elsewhere or still passes --discard-edits.
+
+It refuses a walk repository with changes that are not committed. It stages only the paths that it wrote, and its undo
+command names only those paths.
 
 The script writes only into a walk repository. It refuses one that is the class folder, the project, or inside or
 around either, by what the folders are on the disk and not by their text. It refuses one whose .git is a file, a
@@ -26,7 +32,7 @@ A slides folder is the folder of a manifest. The script copies it whole, and not
 refuses a manifest in the class folder itself, or in a folder that holds the notes of a walk: the notes there
 have the private lines. It refuses a slides folder with a symbolic link in it, a PDF that is not the file of an entry of
 the manifest, or a slides file with a private line. It refuses notes that are a symbolic link, a blockquote with a private
-and a public cue, and a toc.toml with a private line in a value. Last, it reads every file that the commit would take,
+and a public cue, and a toc.toml or a slides.toml with a private line in a value or a comment. Last, it reads every file that the commit would take,
 written or not, and stops before the commit if one has a private line. It also stops on a
 line in fenced code that would be private outside it, unless --allow-cues-in-code says that each is code to show.
 
@@ -36,6 +42,7 @@ The script never writes build/walk.pdf, the student's own PDF. It never pushes: 
 import argparse
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -44,13 +51,15 @@ import unicodedata
 from pathlib import Path
 
 from common import GITHUB, HERE, TEMPLATES, TIMEWALK, UVX, TocError, fill, run, toc_walks, walk_text, yes
-from private import MixedCue, in_code, private_lines
+from private import MixedCue, in_code, private_lines, toml_cues
 from walk_init import FILES
 
 # What walk-init writes, and the folders that its .gitignore names: no path of toc.toml may take their place
 OWN = {name.casefold() for name in FILES if name != "walk.md"} | {"toc.toml", ".git"} | {
     found.casefold() for found in re.findall(r"^/([^/\s]+)/$", (TEMPLATES / "walk" / "gitignore").read_text(encoding="utf-8"), re.MULTILINE)}
 WALK_MARK = "--replay worktree"  # a line of the walk template's justfile, and of no other justfile
+SOURCE = re.compile(r'^timewalk\s*:=\s*env\("TIMEWALK",\s*"([^"]*)"\)', re.MULTILINE)  # where a justfile takes timewalk from
+TOUCHED: list[Path] = []  # every path that target() let the script write, delete or make, in order
 
 
 class Refused(Exception):
@@ -72,6 +81,8 @@ def main() -> int:  # The exit code
     parser.add_argument("--timewalk", default=TIMEWALK, help=f"timewalk for the PDF (default: {TIMEWALK})")
     parser.add_argument("--message", default="The walk, from the class notes", help="the commit message")
     parser.add_argument("--no-commit", action="store_true", help="write and show the diff; do not commit")
+    parser.add_argument("--replace-edited", action="store_true",
+                        help="make a file that walk-init wrote and that was edited by hand again from the template (default: keep it)")
     parser.add_argument("--allow-cues-in-code", action="store_true",
                         help="go on when a line in fenced code would be private outside it: each such line is code for students")
     args = parser.parse_args()
@@ -79,9 +90,14 @@ def main() -> int:  # The exit code
     if bool(args.notes) == bool(args.toc):
         print("walk-update: give --notes, or --toc for a class with several walks", file=sys.stderr)
         return 2
+    args.kept, args.notices = [], []
     try:
         check_walk(args, walk)
+        clean(walk)
         args.upstream = upstream_of(args, walk)
+        args.notices += class_notices(args)
+        for name in FILES:  # every check of a path before the first write, so that a refusal leaves nothing half-written
+            target(walk, walk / name, record=False)
         written = toc(args, walk) if args.toc else one(args, walk)
         written += templates(args, walk)
     except (Refused, TocError) as refused:
@@ -108,9 +124,51 @@ def main() -> int:  # The exit code
 
 def undo(
     walk: Path,  # The walk repository
-) -> str:  # The commands that put back its files as committed
-    """Say how to throw away what walk-update wrote."""
-    return f"To undo the files: git -C {walk} checkout . && git -C {walk} clean -fd"
+) -> str:  # The commands that put back, as committed, the paths that walk-update wrote, and no other
+    """Say how to throw away what walk-update wrote: remove each path it wrote, then check out those that HEAD has."""
+    paths = sorted({path.relative_to(walk).as_posix() for path in TOUCHED})
+    if not paths:
+        return "walk-update wrote nothing."
+    known = [path for path in paths if subprocess.run(["git", "-C", str(walk), "--literal-pathspecs", "cat-file", "-e", f"HEAD:{path}"],
+                                                      capture_output=True, check=False).returncode == 0]
+    command = "rm -rf -- " + " ".join(shlex.quote(str(walk / path)) for path in paths)
+    if known:
+        command += f" && git -C {shlex.quote(str(walk))} --literal-pathspecs checkout HEAD -- " + " ".join(shlex.quote(path) for path in known)
+    return f"To undo what walk-update wrote: {command}"
+
+
+def clean(
+    walk: Path,  # The walk repository
+) -> None:
+    """Refuse a walk repository with changes that are not committed: walk-update would write over them, or commit them."""
+    status = subprocess.run(["git", "-C", str(walk), "status", "--porcelain", "-z"], capture_output=True, text=True, check=False)
+    if status.returncode != 0:
+        raise Refused(f"git cannot read the status of {walk}: {status.stderr.strip()}")
+    entries, changed = status.stdout.split("\0"), []
+    while entries:
+        entry = entries.pop(0)
+        if len(entry) > 3:
+            changed.append(entry[3:])
+            if entry[0] in "RC" and entries:  # a rename or a copy: its old path comes next, with no status
+                entries.pop(0)
+    if changed:
+        raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  "
+                      + "\n  ".join(changed))
+
+
+def class_notices(
+    args: argparse.Namespace,  # The command line
+) -> list[str]:  # What to tell the author about the class's own justfile, which walk-update reads and never writes
+    """Warn when the class's justfile takes timewalk from another source than the templates, or still passes --discard-edits."""
+    justfile = (args.toc or args.notes).expanduser().resolve().parent / "justfile"
+    text = justfile.read_text(encoding="utf-8", errors="ignore") if justfile.is_file() else ""
+    found, notices = SOURCE.search(text), []
+    if found and found.group(1) != GITHUB:
+        notices.append(f"the class's justfile, {justfile}, takes timewalk from {found.group(1)}, and the walk repository from {GITHUB}. "
+                       "Copy the timewalk line of walk-kit's templates/class/justfile into it")
+    if "--discard-edits" in text:
+        notices.append(f"the class's justfile, {justfile}, still passes --discard-edits. A move keeps the edits now: take the flag out")
+    return notices
 
 
 def within(
@@ -167,11 +225,14 @@ def check_walk(
 def target(
     walk: Path,  # The walk repository, resolved
     path: Path,  # A file or folder that the script is about to write, delete or make
+    record: bool = True,  # False for a check before any write: the path is not written yet
 ) -> Path:  # The same path, once it is known to be safe to write
     """Refuse a write anywhere but in the walk repository: not the repository itself, not its .git, and not through a symbolic link."""
     resolved = path.resolve()
     if path.is_symlink() or not within(resolved, walk) or within(walk, resolved) or within(resolved, walk / ".git"):
         raise Refused(f"refusing to write {path}: it is not a file of the walk repository {walk}")
+    if record:
+        TOUCHED.append(walk / path.relative_to(walk))
     return path
 
 
@@ -215,7 +276,7 @@ def templates(
     """Write the files that walk-init writes, but walk.md, again from the templates, with the values that walk-init gives them."""
     old = (walk / "justfile").read_text(encoding="utf-8", errors="ignore") if (walk / "justfile").is_file() else ""
     # An old justfile names the timewalk of its day. The old templates are filled with it, to tell them from a hand edit
-    was = re.search(r'^timewalk := env\("TIMEWALK", "([^"]*)"\)', old, re.MULTILINE)
+    was = SOURCE.search(old)
     values = {"project": args.project, "upstream": args.upstream, "timewalk": GITHUB}
     written = []
     for name, template in FILES.items():
@@ -226,11 +287,17 @@ def templates(
         if path.is_file() and not path.is_symlink():
             before = path.read_text(encoding="utf-8", errors="ignore")
             if before != new and before not in versions(template, {**values, "timewalk": was.group(1) if was else GITHUB}):
-                print(f"walk-update: {name} matches no version of walk-kit's template, so it was edited by hand. It is made again "
-                      f"from the template: the diff shows what goes. To keep your text: git -C {walk} checkout HEAD -- {name}")
+                if not args.replace_edited:
+                    args.kept.append(name)
+                    print(f"walk-update: {name} matches no version of walk-kit's template, so it has an edit by hand. It stays as it is")
+                    continue
+                print(f"walk-update: {name} has an edit by hand, and --replace-edited makes it again from the template")
         write(walk, path, new)
         written.append(path)
-    print("walk-update: wrote " + ", ".join(path.name for path in written) + " again from walk-kit's templates")
+    if was and was.group(1) != GITHUB and "justfile" not in args.kept:
+        args.notices.append(f"the walk repository's justfile took timewalk from {was.group(1)}. It now takes timewalk from {GITHUB}")
+    if written:
+        print("walk-update: wrote " + ", ".join(path.name for path in written) + " again from walk-kit's templates")
     return written
 
 
@@ -284,6 +351,8 @@ def one(
         raise Refused(f"the notes {notes} are a symbolic link. Give the notes file itself")
     notes = notes.resolve()
     written = []
+    for path in (walk / "slides", walk / "toc.toml", walk / "walk.md"):  # every check before the first write
+        target(walk, path, record=False)
     if args.slides:
         source = args.slides.expanduser().absolute()
         if not (source / "slides.toml").exists():
@@ -336,6 +405,12 @@ def toc(
     except (TocError, Refused) as error:
         print(f"walk-update: the toc.toml of the walk repository cannot be read, so the files of walks that it dropped are not listed: {error}")
         stale = []
+    # Every check of a path before the first write, so that a refusal leaves nothing half-written
+    planned = [walk / "toc.toml", walk / "walk.md"] + [walk / Path(found["slides"]).parent for found in with_slides]
+    planned += [walk / found["notes"] for found in walks if found["notes"]]
+    planned += [path for found in walks if found["folder"] for path in (walk / found["folder"], walk / found["folder"] / ".gitkeep")]
+    for path in planned:
+        target(walk, path, record=False)
     write(walk, walk / "toc.toml", source.read_bytes())
     written = [walk / "toc.toml"]
     print("walk-update: copied toc.toml")
@@ -395,7 +470,12 @@ def toc_cues(
     """Refuse a toc.toml with a private line in one of its values, such as a description that starts with > Say:."""
     import tomllib  # toc_walks has read it, so this Python has tomllib
 
-    for value in strings(tomllib.loads(toc.read_text(encoding="utf-8"))):
+    text = toc.read_text(encoding="utf-8")
+    comments = toml_cues(text)
+    if comments:
+        raise Refused(f"{toc}:{comments[0] + 1} is a comment with a private line, {text.splitlines()[comments[0]]!r}, and toc.toml goes "
+                      "to students as it is. Take the comment out, or start it with another word")
+    for value in strings(tomllib.loads(text)):
         try:
             private = private_lines(value)
         except MixedCue:
@@ -502,7 +582,7 @@ def dropped_walks(
     kept = {found["id"] for found in walks}
     used = {path for found in walks for path in uses(found)}
     stale = []
-    for found in toc_walks(walk / "toc.toml"):
+    for found in toc_walks(walk / "toc.toml", "the walk repository"):
         if found["id"] not in kept:
             stale += [path for path in uses(found) if path not in used and (walk / path).exists()]
     return sorted(path for path in set(stale) if not any(Path(path).is_relative_to(other) for other in set(stale) - {path}))
@@ -531,6 +611,8 @@ def leaks(
                 found += [f"{file}:{at + 1}" for at in private_lines(text)]
             except MixedCue as mixed:
                 found.append(mixed_message(file, mixed))
+            if file.suffix.lower() == ".toml":  # a TOML comment such as # Say: goes to students as it is
+                found += [f"{file}:{at + 1}" for at in toml_cues(text)]
             code += [f"{file}:{at + 1}" for at in in_code(text)]
     return found, code
 
@@ -563,11 +645,18 @@ def finish(
     walk: Path,  # The walk repository, with its files written
 ) -> int:  # The exit code
     """Show what changed in the walk repository, and commit it on a yes."""
-    run("git", "add", "-A", cwd=walk)
+    # Stage only the paths that walk-update wrote. The walk repository was clean before, so nothing else changed
+    paths = sorted({path.relative_to(walk).as_posix() for path in TOUCHED})
+    known = subprocess.run(["git", "-C", str(walk), "ls-tree", "-r", "-z", "--name-only", "HEAD"], capture_output=True, text=True, check=False)
+    tracked = set(known.stdout.split("\0"))
+    paths = [path for path in paths if (walk / path).exists() or path in tracked or any(name.startswith(path + "/") for name in tracked)]
+    if paths:
+        run("git", "--literal-pathspecs", "add", "-A", "--", *paths, cwd=walk)
     if subprocess.run(["git", "-C", str(walk), "diff", "--cached", "--quiet"], check=False).returncode == 0:
         print(f"walk-update: {walk.name} has no changes")
+        remind(args)
         return 0
-    # git add -A takes every file of the walk repository, not only those written here: read each one that would be committed
+    # Read each file that would be committed, written here or not
     staged = subprocess.run(["git", "-C", str(walk), "diff", "--cached", "--name-only", "--diff-filter=d", "-z"],
                             capture_output=True, text=True, check=True).stdout.split("\0")
     found, code = leaks([walk / name for name in staged if name and not name.lower().endswith(".pdf")])
@@ -580,6 +669,7 @@ def finish(
         return 2
     run("git", "diff", "--cached", "--stat", cwd=walk)
     run("git", "diff", "--cached", cwd=walk)
+    remind(args)
     if args.no_commit or not yes(f"walk-update: commit these changes in {walk}?"):
         run("git", "reset", "--quiet", cwd=walk)
         print("walk-update: written, not committed")
@@ -587,6 +677,18 @@ def finish(
     run("git", "commit", "--quiet", "-m", args.message, cwd=walk)
     print(f"walk-update: committed. To publish it: git -C {walk} push")
     return 0
+
+
+def remind(
+    args: argparse.Namespace,  # The command line, with the files kept and the notices
+) -> None:
+    """Say again, last, what scrolled away: the source of timewalk, the class's justfile, and the files kept as edited by hand."""
+    for notice in args.notices:
+        print(f"walk-update: {notice}")
+    if args.kept:
+        print(f"walk-update: kept {', '.join(args.kept)} as edited by hand, so the walk repository does not get the new text of "
+              f"{'that file' if len(args.kept) == 1 else 'those files'}. To make {'it' if len(args.kept) == 1 else 'them'} again from the "
+              "templates: just walk-update --replace-edited")
 
 
 if __name__ == "__main__":

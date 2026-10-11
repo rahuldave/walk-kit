@@ -29,15 +29,18 @@ also forked @project@, it clones your fork, so that you can push your own work. 
 `@upstream@/@project@`. Every time, it fetches the tags of the steps from `@upstream@/@project@`.
 
 timewalk then puts its replay copy in `worktree/`. The replay copy is a clone of `repo/` on the branch
-`timewalk/replay`, which timewalk moves from step to step. timewalk never writes to `repo/`. Git ignores
-both folders, so they never enter your fork. To clone from another address, run `just setup <address>` before the first `just present`.
+`timewalk/replay`, which timewalk moves from step to step. timewalk never writes to `repo/`. A `worktree/` that
+an older timewalk made is a git worktree, which keeps its records in `repo/.git/worktrees`. Git ignores both
+folders, so they never enter your fork. To clone from another address, run `just setup <address>` before the
+first `just present`.
 
 ## The folders
 
 ```
 @project@-walk/
-├── walk.md        the notes of every step, tracked in your fork
+├── walk.md        the notes of every step, tracked in your fork. With toc.toml, the notes that it names
 ├── toc.toml       only with several walks: the list of walks, and where the notes of each are
+├── slides/        the slides, and slides.toml, which says which slides show at which step
 ├── justfile       the recipes: present, setup, pdf
 ├── repo/          ignored: your clone of @project@
 └── worktree/      ignored: the replay copy
@@ -61,8 +64,8 @@ checks out each move. The moves of a step go in order. To go back, press **Resta
 - **The notes column** on the right shows the notes of the step. A click on a command types it into its
   terminal. Read the command, and then press Enter to run it. To run a command with one click, turn on
   **run on click**.
-- **Edit** at the top of the notes column changes the notes of the step in `walk.md`. Commit `walk.md`
-  to your fork to keep your notes.
+- **Edit** at the top of the notes column changes the notes of the step. They are in `walk.md`, or in the notes
+  that `toc.toml` names. Commit that file to your fork to keep your notes.
 - **At this step** and **Runs** are terminals in `worktree/`, at the step. The notes of each step start
   with `$ just setup`. The command runs the project's own recipe, at the step, and makes the environment
   of the step. It is not the `just setup` of this repository.

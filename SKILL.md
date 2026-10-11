@@ -32,9 +32,8 @@ Check that these are on the machine, and say which are missing:
 - **Python 3.10 or later** as `python3`, for the scripts. They use only the standard library. A class with
   `toc.toml` needs 3.11, which reads TOML
 
-timewalk is not pinned. Every run fetches the newest from GitHub. `TIMEWALK` names another source,
-for example a working copy. On this skill's branch `walks`, `scripts/common.py` names timewalk's branch
-`walks`, which has the walks and the tutorials.
+timewalk is not pinned. Every run fetches the newest from GitHub. `scripts/common.py` names the source, and says
+why. `TIMEWALK` names another source, for example a working copy.
 
 The project must have its step tags on GitHub. `git push origin main --tags` puts them there.
 
@@ -91,7 +90,8 @@ checker skips code, in a fence or inline. README.md says how a class made before
    refuses a manifest in the class folder itself or beside the notes of a walk. It writes only into the walk repository.
    It refuses a `--walk` that is the class folder or the project by any spelling, or a worktree or a submodule. It also
    refuses a path of `toc.toml` with a `..`. It writes the walk repository's justfile, README.md, AGENTS.md, CLAUDE.md and .gitignore again
-   from the templates, and says when one has an edit by hand. Before the commit, it checks every file that the commit
+   from the templates. It keeps a file that has an edit by hand, unless `--replace-edited` says otherwise. It refuses a
+   walk repository with changes that are not committed. Before the commit, it checks every file that the commit
    would take. Add `--pdf` to ship `bla.pdf`, and `bla-ID.pdf` for each
    other walk with slides. It shows the diff, and commits on a yes. It never pushes.
 

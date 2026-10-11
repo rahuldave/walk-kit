@@ -13,5 +13,6 @@ right of the page.
 - **`$ just setup` starts every step.** It is the project's own recipe, at the step. It makes the environment
   of the step, and what the step needs.
 - **A move keeps your work.** Before a move, timewalk keeps your edits and commits in `worktree/` on a branch
-  `timewalk/saved/<step>`, and the page says how to get them back.
+  `timewalk/saved/<step>`, and the page says how to get them back. In a `worktree/` that an older timewalk made, a
+  move with edits asks first, and stashes them.
 

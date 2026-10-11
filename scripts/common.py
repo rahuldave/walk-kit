@@ -16,8 +16,10 @@ from private import fenced, private_lines, public
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES = HERE.parent / "templates"
-# what the templates name. On walk-kit's branch walks, timewalk's branch walks, which has the walks, the tutorials and the
-# saved branches. Back to "git+https://github.com/rahuldave/timewalk" when timewalk releases walks: both branches merge then
+# What the templates name, and the one place that says where timewalk comes from: timewalk's branch walks. Only that
+# branch has the walks, the tutorials, timewalk-check and the saved branches that the templates use. When timewalk's walks
+# reaches its main, set this to "git+https://github.com/rahuldave/timewalk". Until then, walk-update moves each walk
+# repository onto timewalk's walks, and says so
 GITHUB = "git+https://github.com/rahuldave/timewalk@walks"
 TIMEWALK = os.environ.get("TIMEWALK", GITHUB)  # what a run of these scripts uses
 UVX = ["uvx", "--refresh-package", "timewalk", "--from"]  # then the source, then the command
@@ -58,6 +60,7 @@ def walk_text(
 
 def toc_walks(
     toc: Path,  # A table of contents, toc.toml, of a class with several walks
+    where: str = "the class folder",  # What holds it, for the messages: the class folder or the walk repository
 ) -> list[dict[str, str | None]]:  # Each walk in order: its id, and its folder, notes and manifest from the folder of toc.toml, or None
     """Read the walks of a table of contents: where the folder, the notes and the slides of each one are.
 
@@ -81,10 +84,10 @@ def toc_walks(
             if path is None:
                 continue
             if not isinstance(path, str) or Path(path).is_absolute() or ".." in Path(path).parts or not Path(path).parts:
-                raise TocError(f"in {toc}, the {key} of walk {walk.get('id')} is {path!r}. Give a path inside the class folder, "
+                raise TocError(f"in {toc}, the {key} of walk {walk.get('id')} is {path!r}. Give a path inside {where}, "
                                "from the folder of toc.toml, with no `..`")
             if not (toc.parent / path).resolve().is_relative_to(toc.parent.resolve()):
-                raise TocError(f"in {toc}, the {key} of walk {walk.get('id')} leads outside the class folder: {path}")
+                raise TocError(f"in {toc}, the {key} of walk {walk.get('id')} leads outside {where}: {path}")
         found.append({"id": walk.get("id"), **paths})
     return found
 
