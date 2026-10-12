@@ -57,24 +57,24 @@ def manifest_files(
 def prose_files(
     folder: Path,  # The class folder
 ) -> tuple[list[Path], list[str], list[str]]:  # The files to check, the errors, and the notes for the user
-    """Find the prose of a class: its README, AGENTS.md and CLAUDE.md, the notes of every walk, and the slides."""
+    """Find the prose of a class: its README, AGENTS.md and CLAUDE.md, the notes and intro of every walk, and the slides."""
     files = [folder / name for name in ("README.md", "AGENTS.md", "CLAUDE.md")]
-    notes, manifests, problems, warnings = [], [], [], []
+    notes, manifests, problems, warnings = [], [], [], []   # notes: (what it is, its path)
     toc = folder / "toc.toml"
     if toc.is_file():
         try:
             for walk in toc_walks(toc):
-                notes += [folder / walk["notes"]] if walk["notes"] else []
+                notes += [(key, folder / walk[key]) for key in ("notes", "intro") if walk[key]]
                 manifests += [folder / walk["slides"]] if walk["slides"] else []
         except TocError as error:
             problems.append(str(error))
     else:
-        notes, manifests = [folder / "notes.md"], [folder / "slides" / "slides.toml"]
-    for path in notes:
+        notes, manifests = [("notes", folder / "notes.md")], [folder / "slides" / "slides.toml"]
+    for key, path in notes:
         if path.is_file():
             files.append(path)
         else:
-            problems.append(f"the notes {path.relative_to(folder)} are missing")
+            problems.append(f"the {key} {path.relative_to(folder)} " + ("are missing" if key == "notes" else "is missing"))
     root = folder.resolve()
     for manifest in (found for found in manifests if found.is_file()):
         try:

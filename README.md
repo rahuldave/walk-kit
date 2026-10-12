@@ -17,7 +17,8 @@ yourself.
 
 A walk is one path through the steps, with its own notes and slides. A narrative goes from tag to tag. A
 tutorial also stops at each move, a small commit between two tags, and the class makes each move in turn.
-A class has one walk, or several listed in `toc.toml`. [WALKS.md](WALKS.md) says what each kind needs.
+A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
+tutorial. [WALKS.md](WALKS.md) says what each kind needs.
 
 ## What you need
 
@@ -56,7 +57,7 @@ just walk-update        # refresh bla-walk from the notes and slides of every wa
 just present            # open the walk, with your notes and the clock. just present ID opens another walk
 just check              # check the notes and slides of every walk against the steps
 just style              # check the prose of the class against the writing guide
-just draft ID           # draft the notes of a tutorial's moves; add --write to put them in its notes
+just draft ID           # draft the notes of a tutorial's moves; --write puts them in its notes, --blocks adds a block for each mode
 just pdf                # build/bla.pdf: the slides, one page each. The notes are for the step browser
 BRAND=brand/x just pdf  # the same, with the look of the brand folder brand/x: font, colours, cover, dividers
 just check-pdf          # check that no slide is cut off in it

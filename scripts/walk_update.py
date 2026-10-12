@@ -51,7 +51,7 @@ import unicodedata
 from pathlib import Path
 
 from common import GITHUB, HERE, TEMPLATES, TIMEWALK, UVX, TocError, fill, run, toc_walks, walk_text, yes
-from private import MixedCue, in_code, private_lines, toml_cues
+from private import MixedCue, in_code, private_lines, public, toml_cues
 from walk_init import FILES
 
 # What walk-init writes, and the folders that its .gitignore names: no path of toc.toml may take their place
@@ -381,17 +381,23 @@ def toc(
     args: argparse.Namespace,  # The command line, with --toc
     walk: Path,  # The walk repository
 ) -> list[Path]:  # The files and folders written into the walk repository
-    """Copy toc.toml, the slides folder of every walk, and then the notes of every walk without the private lines."""
+    """Copy toc.toml, the slides folder of every walk, and then the notes and the intro of every walk without the private lines."""
     source = args.toc.expanduser().resolve()
     folder = source.parent
     walks = toc_walks(source)
     toc_cues(source)
     for found in walks:
-        for key in ("folder", "notes", "slides"):
+        for key in ("folder", "notes", "slides", "intro"):
             if found[key]:
                 own(found[key], key, found["id"], notes=key == "notes")
-        if found["notes"] and links(folder / found["notes"], folder):
-            raise Refused(f"the notes of walk {found['id']}, {found['notes']}, go through a symbolic link. Give the notes file itself")
+        for key in ("notes", "intro"):
+            if found[key] and links(folder / found[key], folder):
+                raise Refused(f"the {key} of walk {found['id']}, {found[key]}, go through a symbolic link. Give the file itself")
+        if found["intro"] and any((folder / found["intro"]).resolve() == (folder / other["notes"]).resolve()
+                                  or found["intro"].casefold() == other["notes"].casefold() for other in walks if other["notes"]):
+            raise Refused(f"walk {found['id']}: its intro {found['intro']} is the notes of a walk. Give the intro a file of its own")
+        if found["intro"] and not (folder / found["intro"]).is_file():   # timewalk refuses a toc.toml whose intro is not there
+            raise Refused(f"walk {found['id']}: its intro {found['intro']} is not a file in {folder}. Write it, or take intro out of toc.toml")
     notes = [source] + [(folder / found["notes"]).resolve() for found in walks if found["notes"]]
     with_slides = [found for found in walks if found["slides"] and (folder / found["slides"]).is_file()]
     for found in walks:  # timewalk refuses a toc.toml that names a folder that is not there
@@ -407,7 +413,7 @@ def toc(
         stale = []
     # Every check of a path before the first write, so that a refusal leaves nothing half-written
     planned = [walk / "toc.toml", walk / "walk.md"] + [walk / Path(found["slides"]).parent for found in with_slides]
-    planned += [walk / found["notes"] for found in walks if found["notes"]]
+    planned += [walk / found[key] for found in walks for key in ("notes", "intro") if found[key]]
     planned += [path for found in walks if found["folder"] for path in (walk / found["folder"], walk / found["folder"] / ".gitkeep")]
     for path in planned:
         target(walk, path, record=False)
@@ -429,6 +435,18 @@ def toc(
             write(walk, out, students)
             written.append(out)
             print(f"walk-update: wrote {found['notes']}, without {dropped} private lines")
+    for found in walks:
+        if found["intro"]:
+            out = target(walk, walk / found["intro"])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            text = (folder / found["intro"]).read_text(encoding="utf-8")
+            try:   # all of it goes to students, so not walk_text, which puts the walk's preamble in place of all before the first ##
+                students, dropped = public(text), len(private_lines(text))
+            except MixedCue as mixed:
+                raise Refused(mixed_message(folder / found["intro"], mixed)) from None
+            write(walk, out, students)
+            written.append(out)
+            print(f"walk-update: wrote {found['intro']}, the intro of walk {found['id']}, without {dropped} private lines")
     # A walk's folder with nothing in it yet: git keeps no empty folder, and timewalk needs the folder
     for found in walks:
         if found["folder"] and not any((walk / found["folder"]).glob("*")):
@@ -590,9 +608,9 @@ def dropped_walks(
 
 def uses(
     found: dict[str, str | None],  # One walk of a toc.toml
-) -> list[str]:  # Its notes, its slides folder and its folder, as written
+) -> list[str]:  # Its notes, its intro, its slides folder and its folder, as written
     """Name the paths of a walk in the walk repository."""
-    paths = [found["notes"], found["folder"]]
+    paths = [found["notes"], found["folder"], found.get("intro")]
     if found["slides"]:
         paths.append(str(Path(found["slides"]).parent))
     return [path for path in paths if path]

@@ -14,9 +14,14 @@ A walk uses three repositories for a project called `bla`:
 | `bla-walk` | The walk: the notes without private cues, the slides, a justfile | Public. Students fork it |
 
 A walk is one path through the steps, with its own notes and slides. A narrative goes from tag to tag. A
-tutorial also stops at each move, a small commit `step-NN.k:` between two tags. A class has one walk, or
-several listed in `toc.toml`. **Read [WALKS.md](WALKS.md) before you write the notes of a walk, or add a walk.**
-It holds the rules of `just setup`, of the history and of a tutorial's notes.
+tutorial also stops at each move, a small commit `step-NN.k:` between two tags. In do mode, the learner
+makes each move by hand. In watch mode, timewalk checks out the commit of each move. The notes of a
+tutorial hold a block for each mode, `::: do` and `::: watch`.
+
+A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
+tutorial with `select`, and shares its notes. **Read [WALKS.md](WALKS.md) before you plan the moves, write
+the notes of a walk, or add a walk.** It holds the rules of `just setup`, of the history, of a tutorial's
+notes and of small walks.
 
 The scripts are in this skill's `scripts/` folder. They take the project, the owner and the paths as
 arguments, and hold no project name. Run them with `python3`, from any folder.
@@ -83,7 +88,8 @@ checker skips code, in a fence or inline. README.md says how a class made before
 
 4. **Write and check the walks.** In the class folder, `just present` opens the first walk, and
    `just present ID` another. `just check` checks every walk against the steps. `just draft ID` drafts the
-   notes of a tutorial's moves, and `just draft ID --write` adds them. WALKS.md gives the order of the checks.
+   notes of a tutorial's moves, and `just draft ID --write` adds them. `--blocks` adds a block for each mode
+   to each draft. WALKS.md gives the order of the checks.
 
 5. **Keep the walk repository up to date.** In the class folder, run `just walk-update`. It copies the notes
    and the slides of every walk, and `toc.toml` if there is one. It copies the folder of each manifest whole, and
@@ -104,6 +110,10 @@ checker skips code, in a fence or inline. README.md says how a class made before
      timewalk's docs, https://rahuldave.com/timewalk/brand.html
    - `just check-pdf` checks that no slide is cut off. The last words of every slide must be in the PDF's text
 
+7. **Make copies to read without timewalk.** `timewalk-export` writes a walk as Markdown files for GitHub,
+   or as a website. The class has no recipe for it yet. WALKS.md, in "Copies to read without timewalk", says
+   how to run it, and where the copies go.
+
 ## The private lines
 
 `scripts/private.py` is the one place that names them. These lines stay in the class material, also when they are
@@ -115,7 +125,8 @@ indented:
   lines that go on without a `>`
 
 A blockquote with a private cue and a public cue, such as `> Try:`, stops `walk-update`. Put a blank line between the
-two cues. The `-->` of an HTML comment around a cue stays.
+two cues. A line `:::` that opens or closes a block for one mode ends the blockquote, and stays. The `-->` of an
+HTML comment around a cue stays.
 
 A line in fenced code is code, and goes to students. But `walk-update` stops on a line in code that would be private
 outside it. `--allow-cues-in-code` says that the line is code to show. Every other line goes to students, other `> `
@@ -128,6 +139,9 @@ cues included. To show a cue to students, start it with another word, for exampl
   changes one file:". Each file gets one item, with its path in code and then what happened to it. WALKS.md shows the
   shape.
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
+- **Plan a tutorial's moves with its blocks.** timewalk checks the learner's files once for each move. So an
+  important command that needs that check gets a move of its own. WALKS.md, in "How small to make a move" and
+  "Write for both modes", says how.
 - **Rehearse every command** of the notes in the replay copy, at its step or its move. Then put it into the notes.
 - **Every command runs through `uv run` or a `just` recipe,** never a bare `python`. Each step's notes start
   with `$ just setup`, which never touches git.

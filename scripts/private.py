@@ -9,7 +9,7 @@ of a notes file, cues included, so `walk-update` leaves these lines out of the w
 - the whole blockquote of the cue: every line from its first `>` line on that starts with `>`, a line of `>` alone
   too, and the lines that go on the paragraph without a `>`, up to a blank line. Lines before the cue in the same
   blockquote go too. A line without a `>` that starts a block of its own ends the blockquote, and stays: a heading, a
-  fence, a list item, HTML, a command or a planned time. A line with `-->` ends it too. It goes with the cue, but its
+  fence, a list item, HTML, a command, a planned time, or the `:::` line of a block for one mode. A line with `-->` ends it too. It goes with the cue, but its
   `-->` stays, so that an HTML comment around a cue is still closed
 - a planned time: a line `time: m:ss`, also when it is indented. Only the presenter's clock band uses it
 
@@ -43,8 +43,9 @@ CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")  # a line that can close one
 QUOTED = re.compile(LEAD + ">")  # a line of a blockquote
 LABEL = re.compile(LEAD + r"(?:>\s*)+[*_]{0,2}[A-Z][A-Za-z]*\s*[*_]{0,2}\s*:")  # a cue of one word, such as > Try:
 # A line that starts a block of its own, so it does not go on a paragraph: a heading, a fence, a list item, a
-# thematic break, HTML, a command for a terminal, or a planned time. It ends a blockquote when it has no `>`
-NEW_BLOCK = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|```|~~~|[-*+]\s|\d+[.)]\s|(?:---|\*\*\*|___)\s*$|<|(?:main|runs[2-9]?)?\$\s|time:)")
+# thematic break, HTML, a command for a terminal, a planned time, or the fence of a block (`::: do`, `:::`). It ends a
+# blockquote when it has no `>`
+NEW_BLOCK = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|```|~~~|[-*+]\s|\d+[.)]\s|(?:---|\*\*\*|___)\s*$|<|(?:main|runs[2-9]?)?\$\s|time:)|^:{3,}\s*(?:\{[^}]*\}|[\w-]+)?\s*$")
 
 
 def fenced(
