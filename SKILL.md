@@ -124,9 +124,10 @@ indented:
 - the whole blockquote of a cue, up to a blank line. The blockquote has its `>` lines, a line of `>` alone, and the
   lines that go on without a `>`
 
-A blockquote with a private cue and a public cue, such as `> Try:`, stops `walk-update`. Put a blank line between the
-two cues. A line `:::` that opens or closes a block for one mode ends the blockquote, and stays. The `-->` of an
-HTML comment around a cue stays.
+A blockquote with a private cue and a public cue, such as `> Try:`, stops `walk-update`, and `just check` reports it as
+an error. Put a blank line between the two cues. A line `:::` that opens or closes a block for one mode ends the
+blockquote, and stays. A command line, such as `$ just test` or `do$ uv lock`, ends it too. The `-->` of an HTML
+comment around a cue stays.
 
 A line in fenced code is code, and goes to students. But `walk-update` stops on a line in code that would be private
 outside it. `--allow-cues-in-code` says that the line is code to show. Every other line goes to students, other `> `
@@ -141,7 +142,9 @@ cues included. To show a cue to students, start it with another word, for exampl
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Plan a tutorial's moves with its blocks.** timewalk checks the learner's files once for each move. So an
   important command that needs that check gets a move of its own. WALKS.md, in "How small to make a move" and
-  "Write for both modes", says how.
+  "Write for both modes", says how. A command that makes a move, such as `uv add` or `chmod +x`, is a `do$` line in the
+  shared text, and never in a `do` block. A tutorial with moves that run `uv add` sets `loose`, as "Files made with
+  uv add" says.
 - **Rehearse every command** of the notes in the replay copy, at its step or its move. Then put it into the notes.
 - **Every command runs through `uv run` or a `just` recipe,** never a bare `python`. Each step's notes start
   with `$ just setup`, which never touches git.

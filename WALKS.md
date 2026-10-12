@@ -98,8 +98,9 @@ bla-class/
 | `notes`, `slides` | The notes file and the manifest of the walk |
 | `folder` | In place of `notes` and `slides`: a folder with `notes.md` and `slides/slides.toml` |
 | `steps` | A narrative on some steps, by name, for example `["step-01", "step-03"]`. A tutorial takes `select` instead |
-| `select` | A small walk: the steps, moves and ranges of moves that it takes out of a bigger walk, for example `["step-04", "step-05.3..step-05.6"]`. Give `steps` or `select`, not both. See [Small walks out of a big one](#small-walks-out-of-a-big-one) |
-| `intro` | A Markdown file. The copies of the walk put it before the first step. See [The intro of a walk](#the-intro-of-a-walk) |
+| `select` | A small walk: the steps, moves and ranges of moves that it takes out of a bigger walk, for example `["step-04", "step-05.3..step-05.6"]`. An entry can have a title. Give `steps` or `select`, not both. See [Small walks out of a big one](#small-walks-out-of-a-big-one) |
+| `intro` | A Markdown file about the walk. The page shows it at the first stop, and the copies put it before the first step. See [The intro of a walk](#the-intro-of-a-walk) |
+| `loose` | In a tutorial: the files that do mode compares by the names of their packages, for example `["pyproject.toml", "uv.lock"]`. See [Files made with uv add](#files-made-with-uv-add) |
 | `tags` | A glob for tags of its own, for example `"hooks-*"`. Give `steps` or `tags`, not both |
 | `setup` | `"manual"`, the only value: the learner runs `just setup` at each step |
 | `moves` | In a tutorial: `"do"` or `"watch"`, the mode it starts in |
@@ -155,6 +156,9 @@ slides = "walks/tutorial/slides/slides.toml"    # its slides
 select = ["step-02.2..step-02.3", "step-05.1"]  # a range of moves, and one move
 ```
 
+An entry in braces gives its stop a title, for example
+`select = [{ range = "step-05.3..step-05.6", title = "Types" }, "step-06"]`.
+
 `select` takes these entries:
 
 | Entry | Example | The walk takes |
@@ -162,6 +166,7 @@ select = ["step-02.2..step-02.3", "step-05.1"]  # a range of moves, and one move
 | A step | `"step-04"` | The whole step. In a tutorial, the step keeps all its moves |
 | A move | `"step-10.3"` | One move, as a small step of its own |
 | A range of moves | `"step-05.3..step-05.6"` | The moves from the first to the last, as one small step. Both moves are in one step |
+| An entry with a title | `{ range = "step-05.3..step-05.6", title = "Types" }` | What `range` names, a step, a move or a range of moves, with a title |
 
 A small step is a step of a walk that holds only some of the moves of a step of the history. It starts at
 the commit before its first move. These rules apply, and `just check` reports an error for each one that a
@@ -172,6 +177,10 @@ walk breaks:
 - **A narrative takes steps and single moves,** and no range. Its whole step is its tag, and the tag comes
   after the moves of the step. So a move goes before its step, as in `["step-01.2", "step-01"]`.
 - **Give `steps` or `select`, not both.**
+
+**Give each range a title.** A range without one has no title in the copies and the PDF. The title shows
+in the step bar, the notes, the browser tab, the PDF and the copies. A title for a step or a move takes
+the place of its title in the notes. See https://rahuldave.com/timewalk/walks.html#a-title-for-a-stop.
 
 ### The notes of a small walk
 
@@ -190,9 +199,13 @@ whole tutorial.
 
 ### The intro of a walk
 
-The key `intro` names a Markdown file, which the copies of the walk put before the first step. See
-[Copies to read without timewalk](#copies-to-read-without-timewalk). The file must be in the class
-folder. `just walk-update` copies it into the walk repository without the private lines, and `just style`
+The key `intro` names a Markdown file about the walk. At the first stop of the walk, the notes column
+shows it under "About this walk", in do mode, in watch mode and in a narrative. Its cues hide in the Room
+window. The copies of the walk put it before the first step. See
+[Copies to read without timewalk](#copies-to-read-without-timewalk).
+
+Give a small walk an intro that says which moves it leaves out between its parts. The file must be in the
+class folder. `just walk-update` copies it into the walk repository without the private lines, and `just style`
 checks it. timewalk does not start when the file of `intro` is missing.
 
 See https://rahuldave.com/timewalk/walks.html#take-a-small-walk-out-of-a-big-one and
@@ -235,11 +248,30 @@ These rules come from building timewalk-test. They hold for every walk.
 - **Give an important command that needs timewalk's own check a move of its own.** timewalk compares the
   learner's files with the commit of a move once for each move. **Your files match** and **Apply** work on
   the whole move.
+- **A move that runs `uv add` or `uv lock` needs `loose`.** Write the command as a `do$` line. See
+  [Files made with uv add](#files-made-with-uv-add).
 - **Let two or three less important commands share a move.** A shared command after their block checks
   them. See [How large to make a block](#how-large-to-make-a-block).
 
 See https://rahuldave.com/timewalk/authoring.html#keep-each-move-small and
 https://rahuldave.com/timewalk/authoring.html#checks-by-timewalk-come-once-for-each-move.
+
+### Files made with uv add
+
+`uv add` writes the newest version of a package into `pyproject.toml` and `uv.lock`. A learner who makes
+the move on a later day gets a newer version, and **Your files match** never comes. So a tutorial with
+moves that run `uv add` or `uv lock` writes each such command as a `do$` line in the shared text, for
+example `do$ uv add --group test pytest`. See [Write for both modes](#write-for-both-modes). It also sets
+this key in its table in `toc.toml`:
+
+```toml
+loose = ["pyproject.toml", "uv.lock"]
+```
+
+Do mode then compares these files by the names of their packages, and not by their versions. Any other
+file that `loose` names is not compared by its contents, but it must be there when the move makes it.
+`just check` warns of an entry that no move changes. See
+https://rahuldave.com/timewalk/walks.html#files-that-match-by-the-names-of-their-packages.
 
 ### The notes of a tutorial
 
@@ -249,7 +281,8 @@ moves". Put `$ just setup` there, and say what the moves do together.
 Then give each move a section `### step-NN.k Title`, in the order of the commits:
 
 - **What we do now,** in shared text at the top. Then the code to type in a `do` block, and what to look at
-  in a `watch` block. See [Write for both modes](#write-for-both-modes).
+  in a `watch` block. A command that makes the move is a `do$` line in the shared text. See
+  [Write for both modes](#write-for-both-modes).
 - **The files changed, as a list of their own.** Never name the changed files inside a sentence of prose,
   because a reader cannot follow it. Start the list with "The move changes these files:", or "The move
   changes one file:" for one file. A step of a narrative says "The step changes these files:", or "The step
@@ -276,6 +309,11 @@ Then give each move a section `### step-NN.k Title`, in the order of the commits
     show: `for word in text.lower().split():`
   - file `tests/test_top.py`: the whole test
   ```
+
+  Put a line with a backtick in it in two backticks, for example
+  ``` show: ``The command `wikiapp` uses this library.`` ```. `just check` warns of a `show:` line that GitHub
+  would show wrong, and says how to write it. See
+  https://rahuldave.com/timewalk/walks.html#quote-a-line-with-backticks.
 - **The command that shows what the move did, at the end.** It is the anchor of the move. Make it safe
   to run again, and say what it gives. A test that fails is a good anchor, if the notes say so.
 
@@ -295,10 +333,19 @@ modes. A narrative has no mode, and shows the `watch` blocks.
 - **Keep as much as you can in the shared text,** as long as it reads well in both modes. The shared text
   holds the list of changed files, and the line `files:` with its items and `show:` lines. It also holds
   the explanation of the change, and the commands that check it.
-- **Put in a block only what differs.** A `do` block holds the commands and the edits that make the move.
-  A `watch` block says what to look at, for example a file or a line of the diff.
+- **Put in a block only what differs.** A `do` block holds the edits by hand that make the move. A `watch`
+  block says what to look at, for example a file or a line of the diff.
+- **Write a command that makes the move as a `do$` line in the shared text.** Do mode is for the learner
+  to run, and watch mode is for the learner to watch. A command makes the move if it changes the files to
+  what the commit of the move has. Examples are `uv add`, `uv lock`, `git rm`, `ruff check --fix` and
+  `chmod +x`. In do mode, a `do$` line is a command to run. In watch mode, the page shows "The move ran:"
+  and the command, with nothing to run.
+- **Keep a check as a shared `$` line,** for example `$ just test`. A `$` line runs in both modes, so it
+  must change no tracked file.
 - **Keep the anchor commands in the shared text.** With an anchor in a `do` block, the move has no
-  command in watch mode, and `just check` warns.
+  command in watch mode, and `just check` warns. A `do$` line is never an anchor. A move whose only
+  commands are `do$` lines has no anchor, and `just check` warns of it too.
+- **Put no `do$` line in a block.** `just check` warns of it, because a `do$` line shows in both modes.
 - **Close each block, and put no heading and no other block in it.** `just check` reports an error
   otherwise.
 
@@ -327,7 +374,8 @@ $ uv run python -m unittest discover -s tests -q
 ```
 
 `just draft ID --blocks --write` drafts a `do` block and a `watch` block in each new move. The tutorial of
-timewalk-test, `walks/tutorial/notes.md`, has blocks in every move.
+timewalk-test, `walks/tutorial/notes.md`, has blocks in every move. The walk `hooks` of timewalk-test makes
+its hook executable with `do$ chmod +x hooks/pre-commit`, in `walks/hooks/notes.md`.
 
 See https://rahuldave.com/timewalk/authoring.html#write-for-both-modes and
 https://rahuldave.com/timewalk/walks.html#do-mode-and-watch-mode.
@@ -337,16 +385,18 @@ https://rahuldave.com/timewalk/walks.html#do-mode-and-watch-mode.
 A move section can hold several blocks, with shared text between them. Let the importance of a command set
 the size of its block:
 
-- **Give an important command a `do` block of its own.** An important command needs a paragraph or more to
-  explain. Put the explanation in the shared text before the block. After the block, put a shared command
-  that checks the result.
-- **Put two or three less important commands in one `do` block.** Give them one line of plan in the shared
-  text before the block, and a shared check after it.
-- **Give a `do` block a `watch` block beside it when there is something to look at.** A `do` block with
+- **Give an important command a part of its own.** An important command needs a paragraph or more to
+  explain. Put the explanation in the shared text before the command. After it, put a shared command that
+  checks the result.
+- **Put two or three less important commands together.** Give them one line of plan in the shared text
+  before them, and a shared check after them.
+- **Give a group of commands a `watch` block beside it when there is something to look at.** A group with
   nothing to look at, such as `mkdir` and a first run of the tests, needs no `watch` block.
 
-A move of one edit has one `do` block for the whole move. A move with several commands has neither a block
-for each command, nor one block for all of them. A shared check after a block checks only what its command
+A command that makes the move is a `do$` line, and needs no `do` block. A command for do mode alone, such
+as `mkdir` before an edit by hand, goes in a `do` block. A move of one edit has one `do` block for the
+whole move. A move with several commands has neither a block for each command, nor one block for all of
+them. A shared check after a block checks only what its command
 shows, and the page shows it apart from the block's commands. Only the shared commands at the end of the
 move are its anchor.
 
@@ -374,7 +424,8 @@ Run these in the class folder, in this order:
 1. **`just check`** runs `timewalk-check`. It checks the notes and the slides of every walk against the
    steps. In a tutorial, it also checks the move sections, and each item and `show:` line against the
    change of its move. It checks each mode as its reader sees it, and warns of a move with no command in
-   one mode. An error stops `just present` too. Read every warning.
+   one mode. A public cue, such as `> Try:`, in the blockquote of a private cue is an error. An error
+   stops `just present` too. Read every warning.
 2. **`just draft ID`** runs `timewalk-notes` on a tutorial. It prints a draft section for each move that
    the notes do not have. `just draft ID --write` adds them to the notes, and `--blocks` adds a `do` and a
    `watch` block to each draft. Finish each draft by hand.

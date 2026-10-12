@@ -121,8 +121,8 @@ lines are private, also when they are indented:
 - the whole blockquote of a cue, up to a blank line. The blockquote has every `>` line around the cue, a line of
   `>` alone, and the lines that go on without a `>`
 
-A blockquote with a private cue and a public cue, such as `> Try:` or `> Fast:`, stops `just walk-update`. Put a
-blank line between the two. When a cue sits in an HTML comment, its `-->` stays. A line in fenced code is code,
+A blockquote with a private cue and a public cue, such as `> Try:` or `> Fast:`, stops `just walk-update`, and
+`just check` reports it as an error. Put a blank line between the two. When a cue sits in an HTML comment, its `-->` stays. A line in fenced code is code,
 and stays. `scripts/private.py` is the one place that says so.
 
 `just walk-update` writes only into the walk repository. It writes each file as a new file, so it replaces a link
