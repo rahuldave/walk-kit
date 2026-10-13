@@ -19,7 +19,7 @@ makes each move by hand. In watch mode, timewalk checks out the commit of each m
 tutorial hold a block for each mode, `::: do` and `::: watch`.
 
 A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
-tutorial with `select`, and shares its notes. **Read [WALKS.md](WALKS.md) before you plan the moves, write
+tutorial and shares its notes. It names them with `select`, or with include lines in notes of its own. **Read [WALKS.md](WALKS.md) before you plan the moves, write
 the notes of a walk, or add a walk.** It holds the rules of `just setup`, of the history, of a tutorial's
 notes and of small walks.
 

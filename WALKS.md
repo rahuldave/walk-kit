@@ -31,7 +31,7 @@ step-02: the tests pass               tag step-02, move step-02.3
 - **The first step has no moves.** Give moves to the first steps after it, so that the class meets moves
   early. Keep at least one later step of one commit, with no moves.
 - **A tutorial takes every tag of its glob.** It cannot take `steps`. To take a part of a tutorial, write
-  a small walk with `select`. See [Small walks out of a big one](#small-walks-out-of-a-big-one). A part with
+  a small walk. See [Small walks out of a big one](#small-walks-out-of-a-big-one). A part with
   a history of its own gets tags of its own on a branch, for example `hooks-00` to `hooks-02`.
 
 See https://rahuldave.com/timewalk/walks.html#tutorial-walks.
@@ -100,6 +100,7 @@ bla-class/
 | `steps` | A narrative on some steps, by name, for example `["step-01", "step-03"]`. A tutorial takes `select` instead |
 | `select` | A small walk: the steps, moves and ranges of moves that it takes out of a bigger walk, for example `["step-04", "step-05.3..step-05.6"]`. An entry can have a title. Give `steps` or `select`, not both. See [Small walks out of a big one](#small-walks-out-of-a-big-one) |
 | `intro` | A Markdown file about the walk. The page shows it at the first stop, and the copies put it before the first step. See [The intro of a walk](#the-intro-of-a-walk) |
+| `shared` | A small tutorial with notes of its own: the notes of the big tutorial, where its include lines take the sections of its moves. Not with `select`, `steps` or `intro`. See [A small walk with notes of its own](#a-small-walk-with-notes-of-its-own) |
 | `loose` | In a tutorial: the files that do mode compares by the names of their packages, for example `["pyproject.toml", "uv.lock"]`. See [Files made with uv add](#files-made-with-uv-add) |
 | `tags` | A glob for tags of its own, for example `"hooks-*"`. Give `steps` or `tags`, not both |
 | `setup` | `"manual"`, the only value: the learner runs `just setup` at each step |
@@ -210,6 +211,52 @@ checks it. timewalk does not start when the file of `intro` is missing.
 
 See https://rahuldave.com/timewalk/walks.html#take-a-small-walk-out-of-a-big-one and
 https://rahuldave.com/timewalk/authoring.html#write-a-move-to-read-alone.
+
+### A small walk with notes of its own
+
+A small tutorial can have a notes file of its own in place of `select` and `intro`. Its include lines take
+the sections of its moves from the notes of the big tutorial, so each move section is still written once.
+Choose it when the walk needs its own words that the big tutorial does not have:
+
+- text at a stop, before its moves, between them or after them
+- what the walk skipped since the stop before
+- a recap after the moves of a stop
+
+If the sections of the big tutorial are enough, choose `select` and `intro`. They have fewer parts to keep up.
+
+```toml
+[[walk]]
+id = "testing"
+title = "The tests of tally, with notes of its own"
+description = "A small tutorial with its own words at each stop: what it leaves out, and what the moves did."
+kind = "tutorial"
+notes = "walks/testing/notes.md"    # its own notes: an intro, and a ## stop for each place, with its includes
+shared = "walks/tutorial/notes.md"  # the notes that its {{include ...}} lines take move sections from
+slides = "walks/tutorial/slides/slides.toml"
+```
+
+Write its notes in this way:
+
+- **Write the intro before the first `##`.** It takes the place of `intro`.
+- **Start each stop with `## Title`.** The words are the title of the stop, with no step name.
+- **Put in moves with include lines.** Write each on a line of its own, for example `{{include step-02.1}}`,
+  `{{include step-02.2..step-02.3}}` or `{{include step-04}}`. The includes of a stop make one
+  whole step, or moves of one step with no move left out. For moves after a gap, start a new stop.
+- **Write `$ just setup` above the first include of a stop of moves.** A walk with notes of its own does not
+  add the commands at the top of the step's section. An include of a whole step brings them.
+- **Put no `files:` list, no `do$` line and no `### step-NN.k` heading in the walk's own text.** The moves
+  bring them. Prose, cues, `$` lines and blocks `::: do` and `::: watch` are good.
+- **Keep each include outside the blocks `::: do` and `::: watch`.** An include brings moves for both modes.
+- **Do not run a first command of a step again in a stop that includes the whole step.** The step brings it.
+- **Put the stops in the order of the history,** and take each move once.
+
+`just check` reports each mistake, one for each stop, and timewalk does not start after an error. An edit
+of the words shows at once. Restart timewalk after you add or remove a stop, or change its includes or its
+title. The page has no **Edit** button for such a walk, so edit both files
+in your editor. `just draft ID --write` writes the missing move sections into the shared notes.
+
+`just walk-update` copies the walk's own notes whole, with the intro, and the `shared` file, each without
+the private lines. The walks `testing` and `finish` of timewalk-test are examples. See https://rahuldave.com/timewalk/walks.html#a-walk-with-notes-of-its-own.
 
 ## Before you write the notes
 

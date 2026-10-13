@@ -18,7 +18,7 @@ yourself.
 A walk is one path through the steps, with its own notes and slides. A narrative goes from tag to tag. A
 tutorial also stops at each move, a small commit between two tags, and the class makes each move in turn.
 A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
-tutorial. [WALKS.md](WALKS.md) says what each kind needs.
+tutorial, with `select` or with notes of its own. [WALKS.md](WALKS.md) says what each kind needs.
 
 ## What you need
 

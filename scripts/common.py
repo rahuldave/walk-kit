@@ -61,8 +61,8 @@ def walk_text(
 def toc_walks(
     toc: Path,  # A table of contents, toc.toml, of a class with several walks
     where: str = "the class folder",  # What holds it, for the messages: the class folder or the walk repository
-) -> list[dict[str, str | None]]:  # Each walk in order: its id, and its folder, notes, manifest and intro from the folder of toc.toml, or None
-    """Read the walks of a table of contents: where the folder, the notes, the slides and the intro of each one are.
+) -> list[dict[str, str | None]]:  # Each walk in order: its id, and its folder, notes, manifest, intro and shared notes from the folder of toc.toml, or None
+    """Read the walks of a table of contents: where the folder, the notes, the slides, the intro and the shared notes of each one are.
 
     Raises `TocError` for a toc.toml that cannot be read, or that names a path that is absolute, has a `..`, or leads out
     of the folder of toc.toml. `NoToml` is the TocError of a Python before 3.11."""
@@ -80,7 +80,8 @@ def toc_walks(
         paths = {"folder": folder,
                  "notes": walk.get("notes") or (f"{folder}/notes.md" if folder else None),
                  "slides": walk.get("slides") or (f"{folder}/slides/slides.toml" if folder else None),
-                 "intro": walk.get("intro")}
+                 "intro": walk.get("intro"),
+                 "shared": walk.get("shared")}   # a walk with notes of its own: the notes its include lines take sections from
         for key, path in paths.items():
             if path is None:
                 continue
