@@ -1,6 +1,6 @@
 ---
 name: walk
-description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class, with one walk or several, narratives and tutorials. Use it to make the public walk repository that students fork, PROJECT-walk, and to refresh it without the private cues. Use it to make the PDF of the slides.
+description: Make and keep up a timewalk class for a project with one tagged commit for each step. Use it to make the private class material, PROJECT-class, with one walk or several, narratives and tutorials. Use it to make the public walk repository that students fork, PROJECT-walk, and to refresh it without the private cues. Use it to make the pages that students read on GitHub and on a website. Use it to make the PDF of the slides.
 ---
 
 # walk: a class that replays a project, step by step
@@ -17,6 +17,12 @@ A walk is one path through the steps, with its own notes and slides. A narrative
 tutorial also stops at each move, a small commit `step-NN.k:` between two tags. In do mode, the learner
 makes each move by hand. In watch mode, timewalk checks out the commit of each move. The notes of a
 tutorial hold a block for each mode, `::: do` and `::: watch`.
+
+The walk repository also has pages, so that a student can read each walk without timewalk, on GitHub or on its
+website. A tutorial has two ways of reading. **Read the tutorial** is watch mode, and **Build it yourself** is do
+mode. A narrative has Read the tutorial only. Each part of the pages ends with **What changed**, the files of the
+change with their words, diffs and links. `just walk-update` makes the pages from the facts file of each walk, a
+JSON file that `timewalk-export --json` writes.
 
 A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
 tutorial and shares its notes. It names them with `select`, or with include lines in notes of its own. **Read [WALKS.md](WALKS.md) before you plan the moves, write
@@ -61,9 +67,9 @@ and walk repositories, and the commit and tag messages that become notes.
 3. A commit message or a tag message is not a file. Write it to a file in a temporary folder, and check that file.
 
 `just style` leaves out the forms that the notes own, so keep them as they are. A command line, such as
-`$ just setup` or `runs$ uv run train`, stays as the reader types it. A line `time: m:ss` stays. An item of the list
-of files that a move or a step changed keeps the form that `timewalk-notes` drafts, with its colon and semicolon. The
-checker skips code, in a fence or inline. README.md says how a class made before `just style` gets the recipe.
+`$ just setup` or `runs$ uv run train`, stays as the reader types it. A line `time: m:ss` stays. The checker skips
+code, in a fence or inline. It checks the words of each item under `files:` as prose, because the pages show them
+under What changed. README.md says how a class made before `just style` gets the recipe.
 
 ## Tasks
 
@@ -87,17 +93,29 @@ checker skips code, in a fence or inline. README.md says how a class made before
    repository `OWNER/bla-walk`.
 
 4. **Write and check the walks.** In the class folder, `just present` opens the first walk, and
-   `just present ID` another. `just check` checks every walk against the steps. `just draft ID` drafts the
-   notes of a tutorial's moves, and `just draft ID --write` adds them. `--blocks` adds a block for each mode
-   to each draft. WALKS.md gives the order of the checks.
+   `just present ID` another. `just check` checks every walk against the steps, and then the pages that students
+   read. `just draft ID` drafts the notes of a tutorial's moves, each with a `do` and a `watch` block and an item
+   under `files:` for every file. `just draft ID --write` adds them. Write each section by the rules of WALKS.md, in
+   "Write for a reader who has never heard of timewalk". WALKS.md gives the order of the checks.
 
 5. **Keep the walk repository up to date.** In the class folder, run `just walk-update`. It copies the notes
    and the slides of every walk, and `toc.toml` if there is one. It copies the folder of each manifest whole, and
-   refuses a manifest in the class folder itself or beside the notes of a walk. It writes only into the walk repository.
+   refuses a manifest in the class folder itself or beside the notes of a walk. With `toc.toml`, it also makes the
+   pages that students read:
+   1. It runs `timewalk-export --json` for each walk, and refuses if `timewalk-check` finds an error.
+   2. It renders every page with `scripts/render.py` before the first write.
+   3. It writes `walks/ID/read.md` and `walks/ID/build.md`, and `walks/README.md`, the list of every walk's pages.
+      It writes the website of the first walk in `site/`, and that of each other walk in `sites/ID/`.
+   4. It removes its own pages that the walks no longer have, and never writes over a file that it did not make.
+   5. It says how many problems the checks of the pages find. `just check` lists them.
+
+   It writes only into the walk repository.
    It refuses a `--walk` that is the class folder or the project by any spelling, or a worktree or a submodule. It also
-   refuses a path of `toc.toml` with a `..`. It writes the walk repository's justfile, README.md, AGENTS.md, CLAUDE.md and .gitignore again
-   from the templates. It keeps a file that has an edit by hand, unless `--replace-edited` says otherwise. It refuses a
-   walk repository with changes that are not committed. Before the commit, it checks every file that the commit
+   refuses a path of `toc.toml` with a `..`. It refuses a
+   walk repository with changes that are not committed.
+
+   It writes the walk repository's justfile, README.md, AGENTS.md, CLAUDE.md, .gitignore and Pages workflow again
+   from the templates. It keeps a file that has an edit by hand, unless `--replace-edited` says otherwise. Before the commit, it checks every file that the commit
    would take. Add `--pdf` to ship `bla.pdf`, and `bla-ID.pdf` for each
    other walk with slides. It shows the diff, and commits on a yes. It never pushes.
 
@@ -110,9 +128,11 @@ checker skips code, in a fence or inline. README.md says how a class made before
      timewalk's docs, https://rahuldave.com/timewalk/brand.html
    - `just check-pdf` checks that no slide is cut off. The last words of every slide must be in the PDF's text
 
-7. **Make copies to read without timewalk.** `timewalk-export` writes a walk as Markdown files for GitHub,
-   or as a website. The class has no recipe for it yet. WALKS.md, in "Copies to read without timewalk", says
-   how to run it, and where the copies go.
+7. **Publish the pages.** `just walk-init` writes the workflow `.github/workflows/pages.yml` into the walk
+   repository, and `just walk-update` keeps it up to date. On each push to `main`, it builds the websites with
+   smalldocs and publishes them on GitHub Pages. In the settings of the walk repository on GitHub, under **Pages**,
+   set the source to **GitHub Actions** once. WALKS.md, in "The pages that students read", says what the pages
+   hold, what each check reports, and how a class made before the pages gets the checks.
 
 ## The private lines
 
@@ -135,10 +155,14 @@ cues included. To show a cue to students, start it with another word, for exampl
 
 ## Rules
 
-- **List the files a move or a step changed, never in prose.** Start the list of a move with "The move changes these
-  files:", or "The move changes one file:". A step of a narrative says "The step changes these files:", or "The step
-  changes one file:". Each file gets one item, with its path in code and then what happened to it. WALKS.md shows the
-  shape.
+- **Write the notes for a reader who has never heard of timewalk.** Keep the words "step", "move", "commit" and
+  "Start" out of the text. Open a step with what we build and why. Open a move with the problem and the change that
+  solves it. Then give the change piece by piece. Give the exact lines in a code block in do mode, and say what to
+  look at in watch mode. Then give the check, and last `files:`, with an item for every file, `uv.lock` too. Write no list of
+  the files in prose. WALKS.md, in "Write for a reader who has never heard of timewalk", gives the rules and an example.
+- **Say a file to take whole with Apply this file, in the shared text.** For a new file, or one too long to type,
+  write **Apply this file** in the shared text, and never only in a `do` block. Then both ways of reading
+  link the whole file.
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Plan a tutorial's moves with its blocks.** timewalk checks the learner's files once for each move. So an
   important command that needs that check gets a move of its own. WALKS.md, in "How small to make a move" and

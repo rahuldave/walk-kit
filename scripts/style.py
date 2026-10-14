@@ -3,16 +3,16 @@
     python3 style.py                  check the class in this folder
     python3 style.py --class DIR      check the class in DIR
     python3 style.py -v               also show the soft notes, for a person to judge
+    python3 style.py PAGE.md ...      check these files, such as the pages that render.py writes
 
 The script checks the prose of the class, and nothing else of its folder: README.md, AGENTS.md and CLAUDE.md, the
 notes of every walk, and the Markdown files that the slides manifest of each walk names. The walks are those of
 toc.toml, or else notes.md with slides/slides.toml. This docstring is the one place that says which files are checked.
 
 The checker reads a copy of each file in which the forms that the notes own are blank lines, so each line keeps its
-number. Those forms are a command line, such as `$ just setup` or `runs$ uv run train`, a line `time: m:ss`, and the
-items of a list of files after a line "The move changes these files:", "The step changes one file:" and the like.
-timewalk-notes drafts those items, with a colon and a semicolon in each. check.py itself is a copy from nossaifd,
-and stays as it is.
+number. Those forms are a command line, such as `$ just setup` or `runs$ uv run train`, and a line `time: m:ss`. The
+words of each item under `files:` are checked as prose: the pages show them under What changed. check.py itself is a
+copy from nossaifd, and stays as it is.
 """
 
 import argparse
@@ -27,8 +27,6 @@ from common import TocError, toc_walks
 CHECKER = Path(__file__).resolve().parent.parent / "style" / "check.py"
 COMMAND = re.compile(r"^\s*[A-Za-z0-9_]*\$(\s|$)")  # $ cmd, runs$ cmd, main$ cmd
 TIME = re.compile(r"^\s*time:\s*\d")
-LEAD = re.compile(r"^\s*The (move|step) changes (these files|one file):\s*$")
-ITEM = re.compile(r"^\s*[-*+]\s")
 
 
 def checker() -> object:  # The module style/check.py
@@ -98,22 +96,8 @@ def prose_files(
 def blank(
     text: str,  # A Markdown file of the class
 ) -> str:  # The same file with the forms that the notes own as blank lines, so every line keeps its number
-    """Blank the command lines, the time lines and the items of each list of files, which have their own form."""
-    out, in_list = [], False
-    for line in text.split("\n"):
-        if LEAD.match(line):
-            in_list = True
-            out.append(line)
-            continue
-        if in_list and not line.strip():
-            out.append(line)
-            continue
-        if in_list and (ITEM.match(line) or line[:1].isspace()):  # an item, or the next line of one
-            out.append("")
-            continue
-        in_list = False
-        out.append("" if COMMAND.match(line) or TIME.match(line) else line)
-    return "\n".join(out)
+    """Blank the command lines and the time lines, which have their own form."""
+    return "\n".join("" if COMMAND.match(line) or TIME.match(line) else line for line in text.split("\n"))
 
 
 def main() -> int:  # The exit code: 1 if a file has a hard problem
@@ -121,9 +105,10 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--class", dest="folder", type=Path, default=Path("."), help="the class folder (default: this folder)")
     parser.add_argument("-v", action="store_true", help="also show the soft notes, for a person to judge")
+    parser.add_argument("files", nargs="*", type=Path, help="files to check in place of the class's prose, such as rendered pages")
     args = parser.parse_args()
     folder = args.folder.expanduser().resolve()
-    files, problems, warnings = prose_files(folder)
+    files, problems, warnings = ([path.resolve() for path in args.files], [], []) if args.files else prose_files(folder)
     for problem in problems + warnings:
         print(f"style: {problem}", file=sys.stderr)
     if not files:

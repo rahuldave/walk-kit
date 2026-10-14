@@ -1,0 +1,51 @@
+# The website of the walk: on every push to main, smalldocs builds site/ and GitHub Pages publishes it at
+# https://@upstream@.github.io/@project@-walk/, with the site of each other walk, from sites/ID, at /@project@-walk/ID/.
+# The walk skill's walk-update writes site/ and sites/ from the notes. In the repository's settings on GitHub, under
+# Pages, set the source to GitHub Actions once.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write  # to publish the site
+  id-token: write  # to prove to Pages that this workflow is the one publishing
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A class with a toc.toml has pages; a walk repository without them has nothing to publish
+    if: hashFiles('site/_smalldocs.yml') != ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: |
+          uvx --from 'smalldocs>=0.1.5' smalldocs render site
+          for other in sites/*/; do
+            [ -d "$other" ] || continue  # no other walk: the glob stays as written
+            id=$(basename "$other")
+            uvx --from 'smalldocs>=0.1.5' smalldocs render "sites/$id"
+            mkdir -p "site/_site/$id"
+            cp -R "sites/$id/_site/." "site/_site/$id/"
+          done
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -5,6 +5,16 @@
 the step changed. It also has terminals in the repository at that step, and the notes of the step with
 their commands.
 
+## Read it without timewalk
+
+If this repository has a `toc.toml`, each walk is also a set of pages, to read on GitHub or on its website. There are two ways to
+read a tutorial. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** gives
+every line to type and every command to run, so that you make the project yourself. Each part of the pages ends
+with **What changed**. It lists every file of the change, with a link to the file and its whole diff.
+
+[The pages on GitHub](walks/README.md) list each walk with its two ways of reading. The same pages are a website,
+[@upstream@.github.io/@project@-walk](https://@upstream@.github.io/@project@-walk/).
+
 ## What you need
 
 - [uv](https://docs.astral.sh/uv/), which also runs timewalk from GitHub
@@ -40,6 +50,8 @@ first `just present`.
 @project@-walk/
 ├── walk.md        the notes of every step, tracked in your fork. With toc.toml, the notes that it names
 ├── toc.toml       only with several walks: the list of walks, and where the notes of each are
+├── walks/         the pages of each walk to read on GitHub, walks/ID/read.md and walks/ID/build.md
+├── site/, sites/  the same pages as a website, which the Pages workflow publishes
 ├── slides/        the slides, and slides.toml, which says which slides show at which step
 ├── justfile       the recipes: present, setup, pdf
 ├── repo/          ignored: your clone of @project@

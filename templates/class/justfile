@@ -71,7 +71,7 @@ present *args: setup
     fi
     uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk {{ quote(repo) }} "${source[@]}" --clock "$@"
 
-# Check the notes and slides of every walk against the steps, and a tutorial's moves. With toc.toml, an error stops just present too
+# Check the notes and slides of every walk against the steps, and a tutorial's moves, and then the pages that students read
 check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -81,6 +81,11 @@ check:
         if [ -f slides/slides.toml ]; then source+=(--slides slides/slides.toml); fi
     fi
     uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-check {{ quote(repo) }} "${source[@]}"
+    # The pages that students read: every line in Build it yourself, and the writing guide. It warns of timewalk's words
+    skill={{ quote(skill) }}
+    if [ -f toc.toml ] && [ -f "$skill/scripts/render.py" ]; then
+        TIMEWALK={{ quote(timewalk) }} python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}"
+    fi
 
 # Check the prose of the class against the walk skill's writing guide. The skill's scripts/style.py says which files. -v also shows the soft notes
 style *args:

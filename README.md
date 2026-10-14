@@ -13,12 +13,33 @@ yourself.
 |---|---|---|
 | `bla` | The project. One commit and one annotated tag `step-NN` for each step | Public |
 | `bla-class` | Your notes with private cues, the slides, and the recipes | Private |
-| `bla-walk` | The walk: the notes without private cues, the slides, and a justfile | Public. Students fork it |
+| `bla-walk` | The walk: the notes without private cues, the slides, a justfile, and the pages to read without timewalk | Public. Students fork it |
 
 A walk is one path through the steps, with its own notes and slides. A narrative goes from tag to tag. A
 tutorial also stops at each move, a small commit between two tags, and the class makes each move in turn.
 A class has one walk, or several listed in `toc.toml`. A small walk takes steps and moves out of a big
 tutorial, with `select` or with notes of its own. [WALKS.md](WALKS.md) says what each kind needs.
+
+## The pages that students read
+
+A student can also read each walk without timewalk, on GitHub or on the website of `bla-walk`. A tutorial has two
+ways of reading:
+
+- **Read the tutorial** explains each change, with the code to look at. It is timewalk's watch mode.
+- **Build it yourself** gives every line to type and every command to run. It is timewalk's do mode.
+
+A narrative has Read the tutorial only. Each part ends with **What changed**. What changed lists every file of the
+change, with its words from the notes, its counts of lines and a link to the file. Then come the diff of each file,
+folded, and links to the change on GitHub and to the code after it.
+
+`just walk-update` makes the pages in a class with `toc.toml`. For each walk, `timewalk-export --json` writes the
+facts file, a JSON file with the text, the commands and the changed files of the walk. Then
+[scripts/render.py](scripts/render.py) renders the pages from it. The pages go into `walks/ID/` of `bla-walk`, with
+a website in `site/` and `sites/ID/`.
+
+The workflow `.github/workflows/pages.yml` of `bla-walk` publishes the website on GitHub Pages. Turn Pages on once.
+In the settings of `bla-walk` on GitHub, under **Pages**, set the source to **GitHub Actions**.
+[WALKS.md](WALKS.md#the-pages-that-students-read) has the detail.
 
 ## What you need
 
@@ -53,11 +74,11 @@ python3 ~/.agents/skills/walk/scripts/class_init.py --project bla --upstream you
 cd ~/Projects/bla-class
 just setup              # clone the project and bla-walk beside this folder, if missing
 just walk-init          # make bla-walk, the repository that students fork
-just walk-update        # refresh bla-walk from the notes and slides of every walk
+just walk-update        # refresh bla-walk from the notes and slides of every walk, and make its pages
 just present            # open the walk, with your notes and the clock. just present ID opens another walk
-just check              # check the notes and slides of every walk against the steps
+just check              # check the notes and slides of every walk against the steps, and the pages that students read
 just style              # check the prose of the class against the writing guide
-just draft ID           # draft the notes of a tutorial's moves; --write puts them in its notes, --blocks adds a block for each mode
+just draft ID           # draft the notes of a tutorial's moves, with a block for each mode; --write puts them in its notes
 just pdf                # build/bla.pdf: the slides, one page each. The notes are for the step browser
 BRAND=brand/x just pdf  # the same, with the look of the brand folder brand/x: font, colours, cover, dividers
 just check-pdf          # check that no slide is cut off in it
@@ -86,13 +107,16 @@ You edit everything in `bla-class`, and never in `bla` or `bla-walk`.
 2. **Edit the notes.** On the page, click **Edit** in the notes column, and then **Save**. Or edit
    `notes.md` in your editor. The page reads it again at the next move.
 3. **Edit the slides** in your editor. timewalk reads the slide files again each time it shows a slide.
-4. **Try each command** in the **At this step** terminal before it goes into the notes. Then run `just check`.
+4. **Try each command** in the **At this step** terminal before it goes into the notes. Then run `just check`. It
+   also checks the pages that students read. Each section of the notes is for a reader who has never heard of
+   timewalk. [WALKS.md](WALKS.md#write-for-a-reader-who-has-never-heard-of-timewalk) gives the rules.
 5. **Check the prose.** Run `just style`, and fix every hard problem.
 6. **Read the PDF.** `just pdf` makes it, with the slides, one page each, for you and for the students. The
    notes are not in it. They are for the step browser. `just check-pdf` checks that no slide is cut off.
 7. **Commit and push `bla-class`.** It is private.
-8. **Send it to the students.** `just walk-update` copies the notes and the slides into `bla-walk`, shows
-   the diff, and asks before it commits. Then push `bla-walk`.
+8. **Send it to the students.** `just walk-update` copies the notes and the slides into `bla-walk`, and makes
+   the pages to read without timewalk. It shows the diff, and asks before it commits. Then push `bla-walk`. The
+   push also publishes the website.
 
 timewalk's documentation describes the [notes](https://rahuldave.com/timewalk/notes.html), the
 [slides](https://rahuldave.com/timewalk/slides.html), the [page](https://rahuldave.com/timewalk/page.html),
@@ -139,8 +163,8 @@ names only those files. It refuses these:
 - a `toc.toml` with a private line in a value, such as a `description`
 - a `toc.toml` or a `slides.toml` with a comment that is a private line without its `#`, such as `# Say: ...`
 
-It also writes the walk repository's `justfile`, `README.md`, `AGENTS.md`, `CLAUDE.md` and `.gitignore` again from
-the templates of walk-kit. So an old walk repository gets the new recipes. The upstream owner is `--upstream`, which
+It also writes the walk repository's `justfile`, `README.md`, `AGENTS.md`, `CLAUDE.md`, `.gitignore` and
+`.github/workflows/pages.yml` again from the templates of walk-kit. So an old walk repository gets the new recipes. The upstream owner is `--upstream`, which
 the class justfile gives, or else the one that the old `justfile` names. A file that matches no version of the
 template has an edit by hand. `just walk-update` keeps that file as it is, and says so again before it asks to
 commit. `just walk-update --replace-edited` makes it again from the template.
@@ -169,6 +193,11 @@ checker come from.
 
 `just walk-update` refreshes the walk repository, and not the class folder. So a class made before `just style` has
 no such recipe. To add it, copy the recipe `style` from `templates/class/justfile` into the class's `justfile`.
+
+In the same way, the `just check` of a class made before the pages does not check them. Copy the last lines of the
+recipe `check` from `templates/class/justfile`, from the comment about the pages that students read. A class that
+made its pages with a script of its own can drop that script for `just walk-update`.
+[WALKS.md](WALKS.md#a-class-made-before-the-pages) says how.
 
 ## Licence
 

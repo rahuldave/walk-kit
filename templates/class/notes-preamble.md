@@ -19,12 +19,15 @@ notes column of its page, every line of it.
   what the step needs, and never touches git. Every command runs through `uv run` or a `just` recipe.
 - **A move of a tutorial** has a section of its own, `### step-NN.k Title`, under its step. `WALKS.md` in the walk
   skill says what the section holds.
-- **Files changed are a list.** Never name them inside a sentence. Start the list of a move with "The move changes
-  these files:", or "The move changes one file:". A step of a narrative says "The step changes these files:", or "The
-  step changes one file:". Each file gets one item, with its path in code and then what happened to it. Then say in a
-  sentence after the list which change to read first.
+- **Write for a reader who has never heard of timewalk.** Students also read these notes as pages, on GitHub and
+  on a website. Keep the words "step", "move", "commit" and "Start" out of the text. Open a step with what we build
+  and why. Open a move with the problem and the change that solves it. Then give the change piece by piece, the
+  check, and last `files:`, with an item for every file, `uv.lock` too. `WALKS.md` in the walk skill gives the rules.
+- **A file to take whole** is said in the text for both modes, with **Apply this file**. The pages then link the
+  whole file.
 - **Write by the guide.** These notes follow the nossaifd writing guide, `style/GUIDE.md` in the walk skill.
-  `just style` checks them. A command line, code and the items of a list of files keep their own form.
+  `just style` checks them. A command line and code keep their own form. The words of each item under `files:` are
+  prose, and follow the guide.
 - **A move keeps edits.** timewalk steps in a replay copy, a clone of the project beside it. Before a move, it keeps
   the edits and commits made there on a branch `timewalk/saved/<step>`, and does not ask. After a command that
   changes files, `git restore .` keeps that notice away.

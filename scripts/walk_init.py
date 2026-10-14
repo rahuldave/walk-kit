@@ -4,9 +4,9 @@
     python3 walk_init.py ... --no-github        make it on this machine only
 
 It holds a justfile (present, setup, pdf), a .gitignore (repo/, worktree/, build/), a README, an
-AGENTS.md with a CLAUDE.md that reads it, and walk.md with only its preamble: `walk_update.py` fills it
-from the class notes. The script commits the files, then asks before it creates the public repository
-OWNER/PROJECT-walk on GitHub and pushes to it.
+AGENTS.md with a CLAUDE.md that reads it, the Pages workflow that publishes the pages of the walks, and walk.md
+with only its preamble: `walk_update.py` fills it from the class notes, and writes the pages. The script commits
+the files, then asks before it creates the public repository OWNER/PROJECT-walk on GitHub and pushes to it.
 """
 
 import argparse
@@ -22,6 +22,7 @@ FILES = {  # a file of the walk repository: its template
     "AGENTS.md": "walk/AGENTS.md",
     "CLAUDE.md": "CLAUDE.md",
     "walk.md": "walk/walk-preamble.md",
+    ".github/workflows/pages.yml": "walk/pages.yml",
 }
 
 
@@ -42,6 +43,7 @@ def main() -> int:  # The exit code
     values = {"project": args.project, "upstream": args.upstream, "timewalk": args.timewalk}
     walk.mkdir(parents=True, exist_ok=True)
     for name, template in FILES.items():
+        (walk / name).parent.mkdir(parents=True, exist_ok=True)
         (walk / name).write_text(fill(template, values), encoding="utf-8")
         print(f"walk-init: wrote {walk / name}")
     run("git", "init", "--quiet", "--initial-branch=main", cwd=walk)

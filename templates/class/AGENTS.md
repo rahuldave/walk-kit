@@ -30,6 +30,10 @@ narrative and a tutorial need, and the rules of `just setup`.
 - **Every command runs through `uv run` or a `just` recipe**, never a bare `python`. Each step's notes start with
   `$ just setup`.
 - **Rehearse every command** in the replay copy, at its step or at its move in a tutorial. Then put it into the notes.
+- **Write for a reader who has never heard of timewalk.** Students also read the notes as pages, without timewalk.
+  Keep the words "step", "move", "commit" and "Start" out of the text. Give the problem and the change first. Then
+  give the change piece by piece, and the check. Last, give `files:` with an item for every file. Say a file to take whole
+  with **Apply this file**, in the text for both modes. `WALKS.md` in the walk skill gives the rules.
 - **No colon before a command.** Write "The last command undoes them", and not "Undo them with:".
 - **Write by the guide.** Everything here follows the nossaifd writing guide, `style/GUIDE.md` in the walk skill. Read
   it before you write. `just style` checks the prose. Fix every hard problem before a commit.
@@ -40,13 +44,13 @@ narrative and a tutorial need, and the rules of `just setup`.
 |---|---|
 | `just setup` | Clones the project and `@project@-walk` beside this folder if they are missing, and checks for the skill. Run it first in a fresh clone |
 | `just present` | Opens the walk on the project, with these notes and slides and the clock. `just present ID` opens another walk of `toc.toml` |
-| `just check` | Checks the notes and the slides of every walk against the steps, and a tutorial's moves |
+| `just check` | Checks the notes and the slides of every walk against the steps, and a tutorial's moves. With `toc.toml`, it then checks the pages that students read |
 | `just style` | Checks the prose of the class against the writing guide of the walk skill. Its `scripts/style.py` names the files |
 | `just draft ID` | Drafts the notes of the moves of a tutorial from its commits. `just draft ID --write` adds them to its notes |
 | `just pdf` | Makes `build/@project@.pdf`, the slides, one page each, for you and for the students. The notes are not in it. `just pdf ID` makes the PDF of another walk |
 | `just check-pdf` | Checks that no slide is cut off in that PDF |
 | `just walk-init` | Makes `@project@-walk`, once. Asks before it creates the public repository |
-| `just walk-update` | Refreshes `@project@-walk` from the notes and the slides of every walk. Shows the diff, and commits on a yes. Never pushes |
+| `just walk-update` | Refreshes `@project@-walk` from the notes and the slides of every walk, and makes the pages that students read. Shows the diff, and commits on a yes. Never pushes |
 
-The scripts behind `just style` and the last three recipes are the walk skill's, in `~/.agents/skills/walk`. Do not
+The scripts behind `just style`, the pages part of `just check` and the last three recipes are the walk skill's, in `~/.agents/skills/walk`. Do not
 copy them here.

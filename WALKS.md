@@ -54,7 +54,9 @@ and then `just setup`. The class can visit whole steps in any order, because eac
 `just setup` of a step makes all that the step needs.
 
 The notes hold a block for each mode, with the words that differ between the modes. See
-[Write for both modes](#write-for-both-modes).
+[Write for both modes](#write-for-both-modes). The pages that students read keep the two modes as two ways of
+reading. **Build it yourself** is do mode, and **Read the tutorial** is watch mode. See
+[The pages that students read](#the-pages-that-students-read).
 
 ## What timewalk does to git
 
@@ -99,7 +101,7 @@ bla-class/
 | `folder` | In place of `notes` and `slides`: a folder with `notes.md` and `slides/slides.toml` |
 | `steps` | A narrative on some steps, by name, for example `["step-01", "step-03"]`. A tutorial takes `select` instead |
 | `select` | A small walk: the steps, moves and ranges of moves that it takes out of a bigger walk, for example `["step-04", "step-05.3..step-05.6"]`. An entry can have a title. Give `steps` or `select`, not both. See [Small walks out of a big one](#small-walks-out-of-a-big-one) |
-| `intro` | A Markdown file about the walk. The page shows it at the first stop, and the copies put it before the first step. See [The intro of a walk](#the-intro-of-a-walk) |
+| `intro` | A Markdown file about the walk. The page shows it at the first stop, and the pages that students read put it before the first part. See [The intro of a walk](#the-intro-of-a-walk) |
 | `shared` | A small tutorial with notes of its own: the notes of the big tutorial, where its include lines take the sections of its moves. Not with `select`, `steps` or `intro`. See [A small walk with notes of its own](#a-small-walk-with-notes-of-its-own) |
 | `loose` | In a tutorial: the files that do mode compares by the names of their packages, for example `["pyproject.toml", "uv.lock"]`. See [Files made with uv add](#files-made-with-uv-add) |
 | `tags` | A glob for tags of its own, for example `"hooks-*"`. Give `steps` or `tags`, not both |
@@ -116,7 +118,8 @@ To add walks to a class:
    `slides/slides.toml` only when the manifest gives every step a slide.
    For a tutorial, run `just draft ID --write`. If the folder has no `notes.md`, it makes one. The file has a
    section `## step-NN Title` for each step, with the title from the tag's message, and a draft section for
-   each move. Then write each section by hand.
+   each move. Then write each section by hand. See
+   [Write for a reader who has never heard of timewalk](#write-for-a-reader-who-has-never-heard-of-timewalk).
 3. Run `just check`.
 
 With `toc.toml`, `just present ID` opens the walk with that id, and `just present` the first one. `just pdf ID`,
@@ -179,8 +182,8 @@ walk breaks:
   after the moves of the step. So a move goes before its step, as in `["step-01.2", "step-01"]`.
 - **Give `steps` or `select`, not both.**
 
-**Give each range a title.** A range without one has no title in the copies and the PDF. The title shows
-in the step bar, the notes, the browser tab, the PDF and the copies. A title for a step or a move takes
+**Give each range a title.** A range without one has no title in the pages that students read and the PDF. The title shows
+in the step bar, the notes, the browser tab, the PDF and the pages. A title for a step or a move takes
 the place of its title in the notes. See https://rahuldave.com/timewalk/walks.html#a-title-for-a-stop.
 
 ### The notes of a small walk
@@ -202,8 +205,8 @@ whole tutorial.
 
 The key `intro` names a Markdown file about the walk. At the first stop of the walk, the notes column
 shows it under "About this walk", in do mode, in watch mode and in a narrative. Its cues hide in the Room
-window. The copies of the walk put it before the first step. See
-[Copies to read without timewalk](#copies-to-read-without-timewalk).
+window. The pages that students read put it before the first part. See
+[The pages that students read](#the-pages-that-students-read).
 
 Give a small walk an intro that says which moves it leaves out between its parts. The file must be in the
 class folder. `just walk-update` copies it into the walk repository without the private lines, and `just style`
@@ -320,39 +323,90 @@ file that `loose` names is not compared by its contents, but it must be there wh
 `just check` warns of an entry that no move changes. See
 https://rahuldave.com/timewalk/walks.html#files-that-match-by-the-names-of-their-packages.
 
+### Write for a reader who has never heard of timewalk
+
+A learner reads the notes in timewalk, or on the pages that `just walk-update` makes for the walk repository. See
+[The pages that students read](#the-pages-that-students-read). The reader knows the program, or wants to learn it.
+The reader does not know timewalk, and does not need to. These rules hold for every walk, a narrative too.
+
+- **Keep timewalk's words out of the text.** "step", "move", "commit", "Start", "Before the moves" and a name such
+  as `step-02.4` are timewalk's words. Do not write them in the text of the notes. The heading
+  `### step-02.1 Title` keeps its name, because timewalk needs it. Only its title is for the reader.
+- **Open a step with what we build, and why,** in terms of the program. For example, write "We cannot tell
+  whether `tally` still works after a change, so we write tests." Do not write "The moves of this step add tests."
+- **Open a move with the problem, and the change that solves it.** Do not open with "Now we add X". Do not open
+  with a list of files, or with a link to a diff.
+- **Then give the change, piece by piece.** Each piece says in the shared text what it changes, and why. The
+  shared text is the text outside the blocks for one mode. See [Write for both modes](#write-for-both-modes).
+  - **In do mode,** the learner makes the change from the page alone. Give the exact lines in a code block. Say
+    where they go, for example "after the line `X`", "in place of these lines" or "the whole file". Give each
+    command that makes the change as a `do$` line. Never describe an edit only in words.
+  - **In watch mode,** say what the change does, and where to see it. "Read the change of `pyproject.toml`."
+    alone explains nothing.
+  - **For a file to take whole,** write **Apply this file** in the shared text. See
+    [A file to take whole](#a-file-to-take-whole).
+- **Then give the check.** Give a command, what it prints, and what that shows.
+- **Last, write `files:`,** with an item and its words for every file of the change, `uv.lock` too. Do not write
+  a list of the files in prose, such as "The move changes these files:". The pages make that list from the facts
+  file.
+- **Keep the same rules in the text of a small walk.** Its intro and the text at its stops are for the same
+  reader. See [The notes of a small walk](#the-notes-of-a-small-walk).
+
+The diffs are the data that the learner checks against. They help, but they are not the explanation. So the text
+above `files:` must explain the change without them. `just check` finds timewalk's words in the text, and each
+file that Build it yourself does not give in full. See [Check a class](#check-a-class).
+
+See https://rahuldave.com/timewalk/authoring.html#write-for-a-reader-who-has-never-heard-of-timewalk.
+
+### A file to take whole
+
+Some changes take a whole file, for example a new file, or a change too long to type. Say so in the shared text,
+for both modes, with **Apply this file**. Name the file in backticks in the same sentence, and say which lines to
+take, or "the whole file":
+
+```markdown
+`scripts/corpus.py` writes the corpus, a text of 2000 words. The file is too long to type, so take the
+whole file `scripts/corpus.py` with **Apply this file**.
+```
+
+- **In timewalk,** the **Apply** bar shows in do mode only. In watch mode the file is already there, and the
+  sentence says that it came whole.
+- **On the pages,** the sentence links to the whole file as the change left it, in both ways of reading. The name
+  of the file in backticks becomes the link, and the words "with **Apply this file**" go. The example above reads
+  "so take the whole file `scripts/corpus.py`", with a link. A sentence that does not name the file gets a link in
+  place of the two bold words.
+- **Apply is a shortcut, and never the only way.** The learner can also copy the file from the link.
+
+Do not put the sentence in a `do` block only. Then a reader of watch mode never learns that the file came whole.
+Do not write **Apply the whole move** for a file to take whole. On the pages it links a page of diffs, and nobody
+can make a file from a diff. So `just check` does not count it as a file given in full. `just check` warns of
+**Apply this file** in a `do` block alone.
+
 ### The notes of a tutorial
 
-The text of a step before its first move is about the whole step. The page shows it as "Before the
-moves". Put `$ just setup` there, and say what the moves do together.
+Write the text of a step before its first move section. The text is about the whole step. The notes column shows
+it in a section of its own, under the title of the step. Put `$ just setup` there, and say what the step builds,
+and why.
 
-Then give each move a section `### step-NN.k Title`, in the order of the commits:
+Give each move a section `### step-NN.k Title`, in the order of the commits. Each section has these parts, in
+this order:
 
-- **What we do now,** in shared text at the top. Then the code to type in a `do` block, and what to look at
-  in a `watch` block. A command that makes the move is a `do$` line in the shared text. See
-  [Write for both modes](#write-for-both-modes).
-- **The files changed, as a list of their own.** Never name the changed files inside a sentence of prose,
-  because a reader cannot follow it. Start the list with "The move changes these files:", or "The move
-  changes one file:" for one file. A step of a narrative says "The step changes these files:", or "The step
-  changes one file:". Give each file an item of its own. The item gives the path as it is, in code, and then
-  what happened to the file, in words. `timewalk-notes` drafts the list this way. Then say in a sentence
-  after the list which change to read first:
-
-  ```markdown
-  The move changes these files:
-
-  - `src/tally/__init__.py`: 5 lines added; adds `top`.
-  - `tests/test_top.py`: a new file of 8 lines; adds `class Top` and `test_most_common_first`.
-
-  Read `top` in `src/tally/__init__.py` first. It sorts by count, most common first, then by the word.
-  ```
-- **A line `files:`, with items.** An item `diff` shows the change of the move to a file. An item `file`
-  shows the file itself. The words of the item say what to look for.
-- **A `show:` line under an item.** It quotes the main line of the change. The page draws an excerpt of the
-  real diff there, so nobody copies a diff into the notes:
+- **The problem, and the change that solves it,** in the shared text, for both modes.
+- **The change, piece by piece.** Give the lines to type in a `do` block, with where they go. A command that
+  makes the move is a `do$` line in the shared text. In a `watch` block, say what the change does, and where to
+  see it. See [Write for both modes](#write-for-both-modes).
+- **One or more anchor commands, in the shared text.** An anchor command is the check of the move. Make it safe
+  to run again, and say what it prints and what that shows. A test that fails is a good anchor, if the notes say
+  that it fails. The notes column shows the anchor commands under the label "Check it".
+- **Last, a line `files:`, with items.** Give an item to every file of the commit, `uv.lock` too. An item `diff`
+  shows the change of the move to a file. An item `file` shows the file itself. The words of the item say what
+  to look for in the file. On the pages, What changed shows the words of each item beside its file.
+- **A `show:` line for the main line of the move.** Under its item, quote that line of the change. The page
+  draws an excerpt of the real diff there, so nobody copies a diff into the notes:
 
   ```markdown
   files:
-  - diff `src/tally/__init__.py`: the loop that counts
+  - diff `src/tally/__init__.py`: one word, `lower()`, answers the failing test.
     show: `for word in text.lower().split():`
   - file `tests/test_top.py`: the whole test
   ```
@@ -361,72 +415,94 @@ Then give each move a section `### step-NN.k Title`, in the order of the commits
   ``` show: ``The command `wikiapp` uses this library.`` ```. `just check` warns of a `show:` line that GitHub
   would show wrong, and says how to write it. See
   https://rahuldave.com/timewalk/walks.html#quote-a-line-with-backticks.
-- **The command that shows what the move did, at the end.** It is the anchor of the move. Make it safe
-  to run again, and say what it gives. A test that fails is a good anchor, if the notes say so.
+
+A step of a narrative follows the same order. Its text says what the step builds and why, then the change, the
+check, and last `files:` with an item for every file of the step.
+
+`just draft ID` drafts each new move section in this shape, with a comment for each part, and an item under
+`files:` for every file of the commit. Replace each comment with the text.
 
 See https://rahuldave.com/timewalk/notes.html and https://rahuldave.com/timewalk/authoring.html.
 
 ### Write for both modes
 
-In do mode, the learner makes the move from the notes alone. In watch mode, the code jumps, so the notes
-must say what happened. A block for one mode holds the words that differ. A line `::: do` or `::: watch`
-opens the block, and a line `:::` closes it.
+In do mode, the learner makes the move from the notes alone. In watch mode, the code jumps, so the notes must say
+what happened. A block for one mode holds the words that differ. A line `::: do` or `::: watch` opens the block,
+and a line `:::` closes it.
 
-The page shows a block only in its mode. It shows the text outside the blocks, the shared text, in both
-modes. A narrative has no mode, and shows the `watch` blocks.
+The page shows a block only in its mode. It shows the text outside the blocks, the shared text, in both modes. A
+narrative has no mode, and shows the `watch` blocks.
 
-- **Start with shared text that says what we do now,** for example "Now we teach `main` an option,
-  `--top N`."
-- **Keep as much as you can in the shared text,** as long as it reads well in both modes. The shared text
-  holds the list of changed files, and the line `files:` with its items and `show:` lines. It also holds
-  the explanation of the change, and the commands that check it.
-- **Put in a block only what differs.** A `do` block holds the edits by hand that make the move. A `watch`
-  block says what to look at, for example a file or a line of the diff.
-- **Write a command that makes the move as a `do$` line in the shared text.** Do mode is for the learner
-  to run, and watch mode is for the learner to watch. A command makes the move if it changes the files to
-  what the commit of the move has. Examples are `uv add`, `uv lock`, `git rm`, `ruff check --fix` and
-  `chmod +x`. In do mode, a `do$` line is a command to run. In watch mode, the page shows "The move ran:"
-  and the command, with nothing to run.
-- **Keep a check as a shared `$` line,** for example `$ just test`. A `$` line runs in both modes, so it
-  must change no tracked file.
-- **Keep the anchor commands in the shared text.** With an anchor in a `do` block, the move has no
-  command in watch mode, and `just check` warns. A `do$` line is never an anchor. A move whose only
-  commands are `do$` lines has no anchor, and `just check` warns of it too.
+- **Keep as much as you can in the shared text,** as long as it reads well in both modes. The shared text holds
+  these parts:
+  - the problem, and the change that solves it, before the blocks
+  - the explanation of each piece of the change
+  - a sentence with **Apply this file**, for a file to take whole
+  - each command that makes the move, as a `do$` line
+  - the commands that check the result, and what they print
+  - last, the line `files:` with its items and `show:` lines
+- **Put in a block only what differs.** A `do` block gives the exact lines to type, and says where they go. It
+  gives each new file whole, in a code block. A `watch` block says what the change does, and names the file and
+  the line to look at.
+- **Write a command that makes the move as a `do$` line in the shared text.** Do mode is for the learner to run,
+  and watch mode is for the learner to watch. A command makes the move if it changes the files to what the commit
+  of the move has. Examples are `uv add`, `uv lock`, `git rm`, `ruff check --fix` and `chmod +x`. In do mode, a
+  `do$` line is a command to run. In watch mode, the page shows the command, with nothing to run.
+- **Keep a check as a shared `$` line,** for example `$ just test`. A `$` line runs in both modes, so it must
+  change no tracked file.
+- **Keep the anchor commands in the shared text.** With an anchor in a `do` block, the move has no command in
+  watch mode, and `just check` warns. A `do$` line is never an anchor. A move whose only commands are `do$` lines
+  has no anchor, and `just check` warns of it too.
 - **Put no `do$` line in a block.** `just check` warns of it, because a `do$` line shows in both modes.
-- **Close each block, and put no heading and no other block in it.** `just check` reports an error
-  otherwise.
+- **Close each block, and put no heading and no other block in it.** `just check` reports an error otherwise.
 
-```markdown
-### step-02.2 A test of an empty text
+The example follows every rule. It opens with the problem, gives the exact file in do mode, and says what to
+look at in watch mode. Then it gives the check, and last an item for every file, `uv.lock` too. The walk sets
+`loose`, because the move runs `uv add`. See [Files made with uv add](#files-made-with-uv-add).
 
-Now we test an empty text, in a new file, `tests/test_empty.py`. An empty text has no words.
+````markdown
+### step-02.1 A test of counting
+
+We cannot tell whether `count` still works after a change, unless we try it by hand each time. A test
+tries it for us. pytest finds the tests of the project and runs them, so we add it to the project first.
+
+do$ uv add --group test pytest
+
+The command puts pytest in a group `test` of `pyproject.toml`, and its exact version in `uv.lock`.
 
 ::: do
-Make `tests/test_empty.py` with the test `test_empty`.
+Make the file `tests/test_count.py`, with these lines:
+
+```python
+from tally import count
+
+
+def test_counts_each_word():
+    assert count("a b a") == {"a": 2, "b": 1}
+```
 :::
 
 ::: watch
-Read the test in the diff below.
+The new file `tests/test_count.py` holds one test, `test_counts_each_word`. It gives `count` the
+text `"a b a"`, and expects `a` twice and `b` once.
 :::
 
-The move changes one file:
+$ uv run pytest -q
 
-- `tests/test_empty.py`: a new file of 8 lines; adds `class Empty` and `test_empty`.
+pytest prints `1 passed`. So `count` counts each word of a short text.
 
 files:
-- diff `tests/test_empty.py`: an empty text counts nothing.
-  show: `self.assertEqual(count(""), {})`
+- diff `pyproject.toml`: pytest, in the group `test`.
+- file `tests/test_count.py`: the first test of `count`.
+  show: `assert count("a b a") == {"a": 2, "b": 1}`
+- diff `uv.lock`: the exact version of pytest, and of the packages that it needs.
+````
 
-$ uv run python -m unittest discover -s tests -q
-```
-
-`just draft ID --blocks --write` drafts a `do` block and a `watch` block in each new move. The tutorial of
-timewalk-test, `walks/tutorial/notes.md`, has blocks in every move. The walk `hooks` of timewalk-test makes
-its hook executable with `do$ chmod +x hooks/pre-commit`, in `walks/hooks/notes.md`.
+The tutorial of timewalk-test, `walks/tutorial/notes.md`, has blocks in every move. The walk `hooks` of
+timewalk-test makes its hook executable with `do$ chmod +x hooks/pre-commit`, in `walks/hooks/notes.md`.
 
 See https://rahuldave.com/timewalk/authoring.html#write-for-both-modes and
 https://rahuldave.com/timewalk/walks.html#do-mode-and-watch-mode.
-
 ### How large to make a block
 
 A move section can hold several blocks, with shared text between them. Let the importance of a command set
@@ -472,12 +548,15 @@ Run these in the class folder, in this order:
    steps. In a tutorial, it also checks the move sections, and each item and `show:` line against the
    change of its move. It checks each mode as its reader sees it, and warns of a move with no command in
    one mode. A public cue, such as `> Try:`, in the blockquote of a private cue is an error. An error
-   stops `just present` too. Read every warning.
+   stops `just present` too. Read every warning. Then, in a class with `toc.toml`, it checks the pages that
+   students read. See [The checks of the pages](#the-checks-of-the-pages).
 2. **`just draft ID`** runs `timewalk-notes` on a tutorial. It prints a draft section for each move that
-   the notes do not have. `just draft ID --write` adds them to the notes, and `--blocks` adds a `do` and a
-   `watch` block to each draft. Finish each draft by hand.
-   Write the instructions, the words of each item, the `show:` lines and the anchor. Then run `just check`
-   again.
+   the notes do not have, with a `do` and a `watch` block, and an item under `files:` for every file of the
+   commit. `just draft ID --write` adds them to the notes. The option `--blocks` is still accepted, and changes
+   nothing. Finish each draft by hand, by the rules of
+   [Write for a reader who has never heard of timewalk](#write-for-a-reader-who-has-never-heard-of-timewalk).
+   Write the problem and the change, the lines to type, what to look at, the anchor, the words of each item and
+   the `show:` lines. Then run `just check` again.
 3. **Run every command of the notes at its commit.**
    - Run a command of a narrative at its tag.
    - Run a command of a tutorial before its first move at the tag before the step.
@@ -489,34 +568,140 @@ Run these in the class folder, in this order:
    opens. Go through every walk, step and move, in do mode and in watch mode.
 5. **`just style`** checks the prose of the class against the writing guide. Fix every hard problem.
 
-## Copies to read without timewalk
+## The pages that students read
 
-`timewalk-export` writes copies of a walk that a reader can read without timewalk, for example on GitHub
-or on a website:
+A student can read each walk without timewalk, on GitHub or on the website of the walk repository.
+`just walk-update` makes these pages from the notes. The pages are for a reader who has never heard of timewalk, so
+they never name timewalk's steps, moves or commits.
 
-- **`--markdown DIR`** writes `TUTORIAL-do.md` and `TUTORIAL-watch.md` for a tutorial, and `TUTORIAL.md`
-  for a narrative.
-- **`--site DIR`** writes a website for smalldocs, with a **Do** and a **Watch** section for a tutorial.
-  `smalldocs render DIR` builds it. With `--quarto`, the website is for Quarto.
+### Two ways of reading
 
-Each copy of a tutorial holds the shared text and the blocks of one mode. The copies leave out the private
-lines, and link each step, move and item to the project on GitHub. After each `files:` list, a copy
-shows the change of each `diff` item as a `diff` code block. `--intro FILE` puts a file of your own
-first, under the title, and `--no-opening` leaves out the text of the notes before the first step.
-`timewalk-export` writes over only the files that it made. It refuses a folder inside the project or its
-replay copy.
+A tutorial has two ways of reading, from the same notes:
 
-The class has no recipe for the copies yet, and `just walk-update` does not make them. It copies the notes
-and the slides for timewalk, and leaves out the private lines by its own rules. So run
-`timewalk-export` by hand into `build/` of the class folder, which git ignores. Take timewalk from the
-source that `scripts/common.py` names, as the recipes do. Put that source in place of `SOURCE`:
+- **Read the tutorial** explains each change, with the code to look at. It holds the shared text and the `watch`
+  blocks, as watch mode does. A command that made the change shows as a sentence, with nothing to run.
+- **Build it yourself** gives every line to type and every command to run, so that the student makes the project.
+  It holds the shared text and the `do` blocks, as do mode does.
 
-```
-uvx --refresh-package timewalk --from SOURCE timewalk-export ../bla --toc toc.toml --walk tutorial --markdown build/copies
-```
+A narrative has one way of reading, Read the tutorial. The app keeps its own switch, **Do** and **Watch**.
 
-Do not copy the files into the walk repository by hand. The scan of `just walk-update` for private lines
-is the check of what reaches students, and it checks only the commits that it makes. Read every copy
-before you publish it.
+### What changed
 
-See https://rahuldave.com/timewalk/walks.html#copies-of-a-tutorial-for-github-and-a-website.
+Each part of the pages ends with a section **What changed**. The section is the same in every part, so a reader
+learns it once:
+
+- every file of the change, with the words of its `files:` item, or else the names of the functions, classes and
+  recipes that the change adds, changes or removes. Then come its counts of lines, and a link to the file as the
+  change left it.
+- the whole diff of each file, folded. A lockfile, such as `uv.lock`, and a binary file get no diff.
+- a link to the change on GitHub, and a link to the code after it
+
+The text above What changed explains the change, and What changed is the data that the reader checks against. Two
+forms of the notes become links on the pages:
+
+- **Apply this file** becomes a link to the file as the change left it. See [A file to take whole](#a-file-to-take-whole).
+- "the change of `X`", with `X` a file of the change, becomes a link to the entry of `X` in What changed.
+
+### How the pages are made
+
+`just walk-update` makes the pages in these stages:
+
+1. It runs `timewalk-export --json` for each walk of `toc.toml`. The command writes the facts file, a JSON file with
+   the text, the commands, the items and the changed files of every part of the walk, without the private lines.
+   A walk that takes the same notes and the same part of the history as a walk before it, in another mode, gets
+   no pages of its own.
+2. It refuses to go on if `timewalk-check` finds an error in a walk. Run `just check`, and fix the error.
+3. It renders every page with the walk skill's `scripts/render.py`, before it writes the first file.
+4. It writes the pages into the walk repository, and removes the pages of an earlier run that the walks no longer
+   have. It never writes over a file that `render.py` did not make. It refuses such a file, and writes nothing.
+
+The pages need `toc.toml`. A class with only `notes.md` gets no pages, and `just walk-update` says so. To get them,
+give the class a `toc.toml` with one walk. See [The table of contents](#the-table-of-contents).
+
+### Where the pages go
+
+| Path in the walk repository | Holds |
+|---|---|
+| `walks/README.md` | A list of every walk, with a link to each of its pages and to its website |
+| `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
+| `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
+| `site/` | The website of the first walk, for smalldocs: a front page that explains the two ways, and a page for each part in `read/` and in `build/` |
+| `sites/ID/` | The website of each other walk |
+| `.github/workflows/pages.yml` | The workflow that builds the websites and publishes them on GitHub Pages |
+
+Do not edit a page by hand. Its first line says that `render.py` made it, and the next `just walk-update` makes it
+again. Edit the notes in the class folder. A walk after the first cannot have the id `read`, `build` or
+`site_libs`, because the website of the first walk has folders with those names.
+
+### Turn on GitHub Pages
+
+On each push to `main`, the workflow builds `site/` and every folder in `sites/` with smalldocs. GitHub Pages then
+publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
+`https://OWNER.github.io/bla-walk/ID/`. Do these steps once for each walk repository:
+
+1. Open the repository on GitHub, then **Settings**, then **Pages**.
+2. Under **Source**, choose **GitHub Actions**.
+3. Push `main`. The **Actions** tab shows the run of the workflow, and its address.
+
+`just walk-init` writes the workflow, and `just walk-update` writes it again from the template. A walk repository
+that has its own workflow at that path keeps it, because it matches no version of the template. Then
+`just walk-update --replace-edited` puts the template in its place. It also makes again every other file that
+has an edit by hand, such as the justfile.
+
+### The checks of the pages
+
+`just check` checks the pages after `timewalk-check`, with `render.py --class`. For each walk that gets pages, it
+renders the pages in a temporary folder, and writes nothing in the walk repository. It reports two kinds of
+problem, and the exit code is 1 if it finds one. It also prints warnings, which do not change the exit code.
+
+| Problem | Example of the report | Fix |
+|---|---|---|
+| A file that Build it yourself does not give in full | `step-02.1: Build it yourself does not give all of tests/test_count.py; the first line missing is ...` | Put the line in a code block of the move, in the shared text or in the `do` block. Or say to take the whole file with **Apply this file**. A binary file always needs **Apply this file** |
+| A page against the writing guide | `build.md: HARD 8: 31 words (at most 25): ...` | Fix the text of the notes that the page shows, often the words of an item. The page comes from the notes |
+
+The warnings are of two kinds:
+
+- **timewalk's words in the text that a reader sees**, for example `warning: step-02.1: "move" in: Now we add a test
+  in this move`. Say it in the words of the program. The check reads the text, the words of each item and the
+  titles, and skips headings, code, the addresses of links and HTML comments. It finds "step", "move" and
+  "commit" in any case, and "Start" inside a sentence. "Start the server" is a verb, and passes. A lesson on git
+  can need the word "commit", so this is a warning and not a problem.
+- **Apply this file in a `do` block alone.** Say a file to take whole in the shared text.
+
+These rules say what Build it yourself gives in full. The check reads each move, and each part with no moves after
+the first:
+
+- **A code block of the move** gives each line that it holds. Every line that the change adds to the file must be
+  in a code block. A code block inside an HTML comment gives nothing, as the page does not show it. A file that only
+  loses lines needs no code.
+- **A file deleted or renamed** must be named in the text or in a `do$` line, such as `do$ git rm old.py`.
+- **Apply this file** gives the whole file that its sentence names.
+- **A `do$` line** gives files in three cases. Only a `do$` line counts, because the notes write every command that
+  makes a change as one. A `$` line gives nothing.
+  - `cp`, `mv`, `install`, `ln`, `curl`, `wget`, `tar` and `unzip` give the files that the line names, for example
+    `do$ cp LICENSE lib/LICENSE`.
+  - A formatter or a fixer that names no file of the change gives every file, for example `do$ just fmt` or
+    `do$ ruff check --fix`.
+  - `uv add`, `uv remove`, `uv lock`, `uv sync` and `uv python pin` give `pyproject.toml`, `.python-version` and the
+    lockfile. `uv init DIR` gives the new files in `DIR`.
+- **Any other `do$` line**, such as `chmod +x`, `git mv`, `git add` or `mkdir`, gives none of the lines of a file.
+- **Apply the whole move** gives nothing, because it links a page of diffs.
+- **A lockfile** needs nothing.
+
+`just walk-update` runs the check of Build it yourself and the check of timewalk's words too, and says how many
+each finds. It writes the pages all
+the same. `just check` lists each problem.
+
+### A class made before the pages
+
+`just walk-update` writes the files of the walk repository, and never the justfile of the class. So the `check`
+recipe of an older class does not check the pages. To add the checks, copy the last lines of the recipe `check`
+from `templates/class/justfile` into the class's `justfile`. These lines start at the comment about the pages
+that students read.
+
+A class that made its pages with a script of its own can drop that script. `just walk-update` now makes the pages.
+First remove the old pages from the walk repository, and commit, because `just walk-update` never writes over a
+page that `render.py` did not make. Its own workflow stays until `just walk-update --replace-edited`.
+
+timewalk can also write its own copies of a walk, with `timewalk-export --markdown DIR` or `--site DIR`. A class
+does not need them. See https://rahuldave.com/timewalk/walks.html#copies-of-a-tutorial-for-github-and-a-website.
