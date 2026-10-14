@@ -5,21 +5,24 @@
     python3 render.py --class . --repo ../bla --github URL            check every walk of a class, for just check
 
 A tutorial has two ways of reading, from one set of facts. **Read the tutorial** explains each change, with the code to
-look at: it is timewalk's watch mode. **Build it yourself** gives every line to type and every command to run: it is
-do mode. A narrative has one, Read the tutorial.
+look at: it is timewalk's watch mode. **Build it yourself** gives every command to run and every change to make by
+hand: it is do mode. A narrative has one, Read the tutorial.
 
-Each page has two kinds of text. The author's text explains. The renderer's text comes from the facts: under each change,
-a section **What changed** lists every file with its words, its line counts and a link to the file, then the whole diff
-of each file, folded, then the links to the change on GitHub and to the code after it. It is the same in every part, so
-a reader learns it once. The renderer's own words never name timewalk's steps, moves or commits.
+Each page has two kinds of text. The author's text explains, and goes on the page as written, every line of it. A
+`patch$` line becomes a link to the file's diff, and in Build it yourself also the command that applies the patch from
+GitHub. The renderer's text comes from the facts: under each change, a
+section **What changed** lists every file with its words, its line counts, the do$ line that makes it and a link to the
+file, then the whole diff of each file, folded, then the links to the change on GitHub and to the code after it. In Build
+it yourself, each patch is open: the whole diff of a file that no do$ line makes, and the lines changed after the do$
+line that makes one. timewalk runs the do$ lines to say which files they make. It is the same in every part, so a reader
+learns it once. The renderer's own words never name timewalk's steps, moves or commits, and its numbers are timewalk's.
 
 `--markdown DIR` writes `read.md` and `build.md` (a narrative: `read.md`), for GitHub. `--site DIR` writes a website for
 smalldocs: `index.qmd`, which explains the two ways, a page for each part in `read/` and `build/`, `_smalldocs.yml` and
 `styles.css`. Every file it writes says so in its first line, and it writes over only such files, and removes its own
 pages that the walk no longer has. The same facts give the same bytes.
 
-`--check` reports, for each change, a file that Build it yourself does not give in full, and the words of timewalk in
-the text that a reader sees. `--class` does the same for every walk that gets pages, with the facts from timewalk, and
+`--check` reports facts made without running the do$ lines, and the words of timewalk in the text that a reader sees. `--class` does the same for every walk that gets pages, with the facts from timewalk, and
 also checks the rendered pages against the writing guide. The exit code is 1 if it finds a problem. `walk_update.py`
 renders with the same functions, and says how many problems there are.
 """
@@ -28,6 +31,7 @@ import argparse
 import hashlib
 import json
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -35,33 +39,21 @@ from pathlib import Path
 from urllib.parse import quote
 
 MADE = "Made by the walk skill's render.py from the facts of the walk. Do not edit it by hand: run just walk-update again."
-FORMATS = (1,)  # the versions of the facts' layout that this script reads
+FORMATS = (3,)  # the versions of the facts' layout that this script reads
 WAYS = {
     "watch": ("Read the tutorial", "read", "Each change explained, with the code to look at."),
-    "do": ("Build it yourself", "build", "Every line to type and every command to run, to make the project yourself."),
+    "do": ("Build it yourself", "build", "Every command to run and every change to make by hand, to make the project yourself."),
 }
 WHAT_CHANGED = ("Each part ends with a section called **What changed**. It lists every file that the part changes, with a link to "
                 "the file, and then the whole diff of each file, folded. A lockfile and a binary file have a link alone. The text "
                 "above it explains the change. What changed is what you check your files against.")
+BY_HAND = ("In Build it yourself, a file that a command makes says which command. A diff that is open is a patch. Apply it with the "
+           "command in the text, or make the same change in your editor.")
 LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "Gemfile.lock",
          "composer.lock", "go.sum", "flake.lock"}
-OUR_WORDS = re.compile(r"\b(?i:steps?|moves?|commits?)\b|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")   # Start inside a sentence, bare, bold or in brackets; "Start the server" is a verb
-APPLY = re.compile(r"\*\*Apply (this file|the whole move)\*\*(?:\s+in\s+timewalk)?")
+OUR_WORDS = re.compile(r"\b(?i:steps?|commits?)\b|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")   # Start inside a sentence, bare, bold or in brackets; "Start the server" is a verb
 CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
-COPIES = re.compile(r"^\s*(cp|mv|install|ln|curl|wget|tar|unzip)\b")   # a do$ line that writes the files it names
-FORMATTERS = re.compile(r"\b(fmt|format|black|isort|prettier|gofmt|autopep8|--fix)\b")   # one that rewrites the files it touches
-
-
-def number(
-    name: str,  # A stop or a move of the walk, such as `step-02`, `step-02.1` or `step-05.3 to step-05.6`
-    fallback: int,  # Its place in the walk, from 1, for a name with no number
-) -> str:  # The number that the reader sees, such as 2, 2.1 or 5.3 to 5.6
-    """Number a part as the reader counts it, from its name in the history, without the word step."""
-    found = [re.search(r"(\d+)((?:\.\d+)?)$", part.strip()) for part in name.split(" to ")]
-    if not all(found):
-        return str(fallback)
-    return " to ".join(str(int(m.group(1))) + m.group(2) for m in found)
 
 
 def slug(
@@ -90,62 +82,12 @@ def span(
     return f"{ticks}{pad}{text}{pad}{ticks}"
 
 
-def uncommented(
-    text: str,  # Markdown of the author's
-) -> str:  # The same without HTML comments outside code: they are for the author, and a page never shows them
-    """Drop the author's HTML comments from what a page shows."""
-    kept, fence, comment = [], None, False
-    lines = text.split("\n")
-    at = 0
-    while at < len(lines):
-        line = lines[at]
-        mark = FENCE.match(line)
-        if fence is None and mark and not comment:
-            fence = mark.group(1)
-        elif fence is not None:
-            if mark and mark.group(1)[0] == fence[0] and not line.strip().strip(fence[0]):
-                fence = None
-            kept.append(line)
-            at += 1
-            continue
-        if comment:
-            if "-->" in line:
-                comment, line = False, line.split("-->", 1)[1]
-            else:
-                at += 1
-                continue
-        line = re.sub(r"<!--.*?-->", "", line)
-        if "<!--" in line:
-            line, comment = line.split("<!--", 1)[0], True
-        kept.append(line)
-        at += 1
-    return "\n".join(kept)
-
-
 def of_mode(
     parts: list[dict],  # Parts of the facts
     mode: str,  # "do" or "watch"
 ) -> list[dict]:  # The parts that a reader of that mode reads
     """Keep the parts for both modes and those for one."""
     return [part for part in parts if part["mode"] in ("shared", mode)]
-
-
-def code_lines(
-    text: str,  # Markdown
-) -> list[str]:  # The lines inside its fenced code blocks
-    """Find the lines of code that a reader can copy."""
-    out, fence = [], None
-    for line in text.split("\n"):
-        mark = FENCE.match(line)
-        if fence is None:
-            if mark:
-                fence = mark.group(1)
-            continue
-        if mark and mark.group(1)[0] == fence[0] and len(mark.group(1)) >= len(fence) and not line.strip()[len(mark.group(1)):].strip():
-            fence = None
-            continue
-        out.append(line)
-    return out
 
 
 def outside_code(
@@ -200,9 +142,10 @@ class Page:
 
     def add(
         self,
-        *lines: str,  # Lines of Markdown
+        *lines: str,  # Lines of Markdown; "" is a blank line between blocks, and a block of several lines comes as one string
     ) -> None:
-        """Add lines, with one blank line at most between blocks."""
+        """Add lines. A blank line between blocks is left out after another; a block of several lines goes in as it is, so
+        that the author's text and a diff keep every line, their blank lines too."""
         for line in lines:
             if not line.strip() and (not self.lines or not self.lines[-1].strip()):
                 continue
@@ -211,11 +154,13 @@ class Page:
     def parts(
         self,
         parts: list[dict],  # The parts of a stop or a move
-        sha: str,  # The commit they lead to, for an Apply
+        sha: str,  # The commit they lead to, for a patch
         files: list[dict],  # The files of that change, for the change of a file
         move: str,  # The move, for the ids of What changed
+        base: str | None = None,  # The commit before, for a part of several commits; None for one commit
     ) -> None:
-        """Write the author's text: prose as written, commands as code, and an Apply as a link to the file or the change."""
+        """Write the author's text: prose as written, commands as code, and a patch$ line as a link to the file's diff under
+        What changed. In Build it yourself, a patch$ line also gives the command that applies the patch from GitHub."""
         known = {f["path"] for f in files}
         run: list[dict] = []   # commands one after another, written as one block
 
@@ -248,22 +193,21 @@ class Page:
             flush()
             if part["kind"] == "prose":
                 text = CHANGE_OF.sub(lambda m: f"[{m.group(1)} `{m.group(2)}`](#{anchor(move, m.group(2))})" if m.group(2) in known else m.group(0),
-                                     uncommented(part["text"]))
-                self.add("", *text.split("\n"), "")
-            elif part["kind"] == "apply":
-                if part["whole"]:
-                    target = f"[the whole change]({self.url}/commit/{sha})"
-                elif part["path"] and f"`{part['path']}`" in part["text"]:   # the file's name, as written, becomes the link
-                    link = f"[`{part['path']}`]({self.blob(sha, part['path'])})"
-                    text = re.sub(r",?\s+with\s+" + APPLY.pattern, "", part["text"], count=1)
-                    text = text.replace(f"`{part['path']}`", link, 1)
-                    self.add("", APPLY.sub(lambda _m, link=link: link, text) if APPLY.search(text) else text, "")
-                    continue
-                elif part["path"]:
-                    target = f"[{span(part['path'])}]({self.blob(sha, part['path'])})"
-                else:
-                    target = f"[the code after this change]({self.tree(sha)})"
-                self.add("", APPLY.sub(lambda _m, target=target: target, part["text"]), "")
+                                     part["text"])
+                self.add("", text, "")
+            elif part["kind"] == "patch":
+                path = part["path"]
+                link = f"[{span(path)}](#{anchor(move, path)})" if path in known else span(path)
+                by = next((f["by"] for f in files if f["path"] == path), "patch")
+                if self.mode == "watch":
+                    self.add("", f"A patch to {link}.", "")
+                elif isinstance(by, int):   # a do$ line wrote the file first: the patch is what changes after it, under What changed
+                    self.add("", f"Then change {link} as its patch shows.", "")
+                else:   # the whole change from GitHub, of which git apply takes this file alone, from the top of the project
+                    diff = f"{self.url}/compare/{base}...{sha}.diff" if base else f"{self.url}/commit/{sha}.diff"
+                    pattern = re.sub(r"([*?\[\\])", r"\\\1", path)   # git apply reads --include as a pattern
+                    self.add("", f"Apply the patch to {link}, from the top of the project:", "", "```bash",
+                             f"curl -sL {diff} | git apply --include={shlex.quote(pattern)}", "```", "")
         flush()
 
     def what_changed(
@@ -272,27 +216,30 @@ class Page:
         move: str,  # The move or stop, for the ids
         files: list[dict],  # The files of the change
         items: list[dict],  # The files: items of the move, with their words
+        commands: list[str],  # The do$ lines of the move, which a file's by counts in
         sha: str,  # The commit after the change
         base: str | None,  # The commit before, for a part of several commits; None for one commit, which has a page of its own
         first: bool = False,  # The first part of the walk, with nothing before it: its files are the whole project
     ) -> None:
-        """Write What changed: every file, its words, counts and link; each diff whole and folded; the change on GitHub."""
+        """Write What changed: every file, its words, counts, link and the command that makes it; each diff whole and folded;
+        the change on GitHub. In Build it yourself, each patch, what is changed by hand, is open."""
         words: dict[str, dict] = {}   # two items for one file: both their words, and all their quoted lines
         for item in of_mode(items, self.mode):
             if item["move"]:
                 continue
             if item["path"] in words:
                 was = words[item["path"]]
-                words[item["path"]] = {**was, "words": "; ".join(w.rstrip(".") for w in (was["words"], item["words"]) if w), "show": was["show"] + item["show"]}
+                words[item["path"]] = {**was, "words": " ".join(ended(w) for w in (was["words"], item["words"]) if w.strip()), "show": was["show"] + item["show"]}
             else:
                 words[item["path"]] = item
         self.add("", f"{'#' * level} What changed" + (f" {{#{anchor(move, 'what-changed')}}}" if self.site else ""), "")
         for found in files:
             path = found["path"]
             item = words.get(path)
-            said = uncommented(item["words"]).strip().rstrip(".") if item and item["words"] else describe(found["names"])
+            said = ended(item["words"]) if item and item["words"].strip() else (describe(found["names"]) + "." if describe(found["names"]) else "")
             link = "" if found["status"] == "deleted" else f" [The file]({self.blob(sha, path)})."
-            self.add(f"- <a id=\"{anchor(move, path)}\"></a>{span(path)}" + (f", {said}" if said else "") + f". {counts(found)}.{link}")
+            source = f" It comes from {span(commands[found['by']])}." if isinstance(found["by"], int) and found["by"] < len(commands) else ""
+            self.add(f"- <a id=\"{anchor(move, path)}\"></a>{span(path)}:" + (f" {said}" if said else "") + f" {counts(found)}.{source}{link}")
             for shown in item["show"] if item else []:
                 self.add(f"  - look at `{shown}`" if "`" not in shown else f"  - look at ``{shown}``")
         for item in of_mode(items, self.mode):
@@ -303,14 +250,33 @@ class Page:
         for found in files:
             if found["binary"] or not found["diff"] or found["path"].rsplit("/", 1)[-1] in LOCKS:
                 continue
-            fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", found["diff"])), default=0))
-            self.add("", f"<details><summary>The diff of <code>{escape(found['path'].replace(chr(10), ' '))}</code></summary>", "",
-                     f"{fence}diff", *found["diff"].rstrip("\n").split("\n"), fence, "", "</details>", "")
+            path = f"<code>{escape(found['path'].replace(chr(10), ' '))}</code>"
+            by, diff, summary, open_ = found["by"], found["diff"], f"The diff of {path}", ""
+            if self.mode == "do" and first:
+                pass   # the project as it starts: the student has it, and makes nothing by hand
+            elif self.mode == "do" and by == "patch":
+                summary, open_ = f"The patch to {path}", " open"
+            elif self.mode == "do" and isinstance(by, int) and by < len(commands):
+                command = f"<code>{escape(commands[by])}</code>"
+                if found["patch"]:
+                    diff, summary, open_ = found["patch"], f"After {command}, the patch to {path}", " open"
+                else:
+                    summary = f"The diff that {command} makes in {path}"
+            fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", diff)), default=0))
+            self.add("", f"<details{open_}><summary>{summary}</summary>", "", "\n".join([f"{fence}diff", diff.rstrip("\n"), fence]), "", "</details>", "")
         if base is None and first:   # the first part: the project as it starts, not one commit's change
             self.add("", f"[The code]({self.tree(sha)}).", "")
             return
         change = f"{self.url}/compare/{base}...{sha}" if base else f"{self.url}/commit/{sha}"
         self.add("", f"[This change on GitHub]({change}). [The code after it]({self.tree(sha)}).", "")
+
+
+def ended(
+    words: str,  # The words of an item, as the author wrote them
+) -> str:  # The same, with a full stop after them when they end with none, so that the line's next sentence starts apart
+    """End the author's words as a sentence, without changing them."""
+    words = words.strip()
+    return words if not words or words[-1] in ".!?:" or words.endswith(("`", ")")) and words.rstrip("`)")[-1:] in ".!?" else words + "."
 
 
 def escape(
@@ -342,6 +308,8 @@ def counts(
         return f"New, {lines(found['added'])}"
     if found["status"] == "deleted":
         return "Deleted"
+    if found["status"] == "modified" and not found["added"] and not found["removed"]:
+        return "Its lines stay as they were"   # a change of mode alone, such as chmod +x
     change = f"{lines(found['added'])} added, {found['removed']} removed" if found["removed"] else f"{lines(found['added'])} added"
     if found["status"] == "renamed":
         return f"Renamed from `{found['old_path']}`" + (f", {change}" if found["added"] or found["removed"] else "")
@@ -359,23 +327,24 @@ def stop_page(
     page = Page(facts, mode, site)
     top = 1 if site else 2
     if not site:
-        page.add(f'<a id="{anchor(stop["name"])}"></a>', "", f"{'#' * top} {number(stop['name'], at)} {stop['title']}".rstrip(), "")
-    page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"])
+        page.add(f'<a id="{anchor(stop["name"])}"></a>', "", f"{'#' * top} {stop['number']} {stop['title']}".rstrip(), "")
+    page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"], stop["start"] if not stop["moves"] else None)
     if stop["moves"]:
         before = f"[The code before this part]({page.tree(stop['start'])}). " if stop["start"] else ""
         page.add("", f"{before}[The code after it]({page.tree(stop['commit'])}).", "")
     else:
         items = [p for p in stop["parts"] if p["kind"] == "item"]
-        page.what_changed(top + 1, stop["name"], stop["files"], items, stop["commit"], stop["start"], first=not stop["start"])
-    for count, move in enumerate(stop["moves"], 1):
+        page.what_changed(top + 1, stop["name"], stop["files"], items, [], stop["commit"], stop["start"], first=not stop["start"])
+    for move in stop["moves"]:
         level = top + 1
-        heading = f"{'#' * level} {number(move['name'], count)} {move['title']}".rstrip()
+        heading = f"{'#' * level} {move['number']} {move['title']}".rstrip()
         if site:
             page.add("", f"{heading} {{#{anchor(move['name'])}}}", "")
         else:
             page.add("", f'<a id="{anchor(move["name"])}"></a>', "", heading, "")
         page.parts(move["parts"], move["commit"], move["files"], move["name"])
-        page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], move["commit"], None)
+        commands = [p["text"] for p in move["parts"] if p["kind"] == "command" and p["makes"]]
+        page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], commands, move["commit"], None)
     return page.lines
 
 
@@ -408,7 +377,7 @@ def markdown_files(
         other = [m for m in ways(facts) if m != mode]
         if other:
             lines[-1] += f" [{WAYS[other[0]][0]}]({WAYS[other[0]][1]}.md) is the other way to read it."
-        lines += ["", WHAT_CHANGED, ""]
+        lines += ["", WHAT_CHANGED, *(["", BY_HAND] if mode == "do" else []), ""]
         lines += intro_lines(facts, mode) + [""]
         for at, stop in enumerate(facts["stops"], 1):
             lines += [*stop_page(facts, stop, at, mode, False), ""]
@@ -426,13 +395,13 @@ def site_files(
     sidebar = ["      - index.qmd"]
     if len(ways(facts)) > 1:
         front += ["There are two ways to read this tutorial. Both have the same parts, in the same order.", ""]
-    front += [WHAT_CHANGED, ""]
+    front += [WHAT_CHANGED, "", *([BY_HAND, ""] if len(ways(facts)) > 1 else [])]
     for mode in ways(facts):
         name, folder, what = WAYS[mode]
         front += [f"## {name}", "", what, ""]
         sidebar += [f"      - section: {json.dumps(name)}", "        contents:"]
         for at, stop in enumerate(facts["stops"], 1):
-            label = f"{number(stop['name'], at)} {stop['title']}".strip()
+            label = f"{stop['number']} {stop['title']}".strip()
             page = f"{folder}/{slug(stop['name'])}.qmd"
             switch = ""
             for other in (m for m in ways(facts) if m != mode):
@@ -443,8 +412,8 @@ def site_files(
             front.append(f"- [{text}]({page})")
             if stop["moves"]:
                 sidebar += [f"          - section: {json.dumps(label)}", f"            href: {page}", "            contents:"]
-                sidebar += [f"              - text: {json.dumps((number(m['name'], k) + ' ' + m['title']).strip())}\n"
-                            f"                href: {page}#{anchor(m['name'])}" for k, m in enumerate(stop["moves"], 1)]
+                sidebar += [f"              - text: {json.dumps((m['number'] + ' ' + m['title']).strip())}\n"
+                            f"                href: {page}#{anchor(m['name'])}" for m in stop["moves"]]
             else:
                 sidebar += [f"          - text: {json.dumps(label)}\n            href: {page}"]
         front.append("")
@@ -463,104 +432,42 @@ def site_files(
 
 
 def squeeze(
-    lines: list[str],  # Lines of Markdown
-) -> str:  # One text, with one blank line at most between blocks, outside fenced code, and a line end at the end
-    """Close up the blank lines, and never touch fenced code."""
-    out, fence = [], None
-    for line in "\n".join(lines).split("\n"):
-        mark = FENCE.match(line)
-        if fence is None and mark:
-            fence = mark.group(1)
-        elif fence is not None and mark and mark.group(1)[0] == fence[0] and len(mark.group(1)) >= len(fence) and not line.strip().strip(mark.group(1)[0]):
-            fence = None
-            out.append(line)
+    lines: list[str],  # Lines of Markdown, as Page.add keeps them: "" between blocks, and a block of several lines as one string
+) -> str:  # One text, with one blank line at most between blocks, and a line end at the end
+    """Join the blocks with one blank line between them. A block keeps every line it has, its blank lines too."""
+    out: list[str] = []
+    for line in lines:
+        if not line.strip():
+            if out and out[-1].strip():
+                out.append("")
             continue
-        if fence is None and not line.strip() and (not out or not out[-1].strip()):
-            continue
-        out.append(line.rstrip() if fence is None else line)
-    return "\n".join(out).strip("\n") + "\n"
+        out.append(line)
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out) + "\n"
 
 
-def gaps_of(
-    name: str,  # The stop or move
-    parts: list[dict],  # Its parts, in do mode
-    files: list[dict],  # The files of its change
-) -> list[str]:  # Each file that the parts do not give in full, with the first line missing
-    """Check one change, as do_gaps says."""
-    problems = []
-    commands = [p["text"] for p in parts if p["kind"] == "command" and p["makes"]]
-    paths = [f["path"] for f in files]
-    code = {line.strip() for p in parts if p["kind"] == "prose" for line in code_lines(uncommented(p["text"])) if line.strip()}
-    said = "\n".join(p.get("text", "") for p in parts if p["kind"] in ("prose", "apply")) + "\n" + "\n".join(commands)
-    whole = {p["path"] for p in parts if p["kind"] == "apply" and p["path"] and not p["whole"]}
-    made = set()
-    for command in commands:
-        base = command.split()
-        named = [path for path in paths if path in command or path.rsplit("/", 1)[-1] in base]
-        if re.match(r"^\s*uv\s+(add|remove|lock|init|sync|python\s+pin)\b", command):
-            made |= {path for path in paths if path.rsplit("/", 1)[-1] in ("pyproject.toml", ".python-version") or path.rsplit("/", 1)[-1] in LOCKS}
-            made |= {path for path in paths for folder in re.findall(r"\buv\s+init\b.*?(\S+)\s*$", command) if path.startswith(folder.rstrip("/") + "/")}
-        elif COPIES.match(command):
-            made |= set(named)   # a command that writes the files it names, such as cp LICENSE lib/LICENSE
-        elif FORMATTERS.search(command) and not named:
-            made |= set(paths)   # a tool that rewrites the project, such as a formatter
-    for found in files:
-        path = found["path"]
-        if path.rsplit("/", 1)[-1] in LOCKS or path in whole or path in made:
-            continue
-        if found["status"] == "deleted" or found["status"] == "renamed":
-            old = found["old_path"] or path
-            if old not in said:   # git rm or git mv, or words that name it
-                problems.append(f"{name}: Build it yourself does not say that `{old}` is {'deleted' if found['status'] == 'deleted' else 'renamed to ' + path}")
-                continue
-        if found["binary"]:
-            problems.append(f"{name}: {path} is a binary file; say to take the whole file with **Apply this file**")
-            continue
-        added = [line[1:] for line in found["diff"].split("\n") if line.startswith("+") and line[1:].strip()]
-        missing = next((line for line in added if line.strip() not in code), None)
-        if missing is not None:
-            problems.append(f"{name}: Build it yourself does not give all of {path}; the first line missing is "
-                            f"`{missing.strip()}`. Put it in a code block, or say to take the whole file with **Apply this file**")
-    return problems
-
-
-def do_gaps(
+def source_gaps(
     facts: dict,  # The facts of a tutorial
-) -> list[str]:  # For each file that Build it yourself does not give in full: the part, the file and the first line missing
-    """Check that a student can make every change from Build it yourself alone: each move, and each stop with no moves after
-    the first. A file is given in full when every line it adds is in a code block, when the text says to take the whole
-    file with **Apply this file**, or when a `do$` line makes it, as the notes write every command that makes a change. A
-    `do$` line makes the files it names, such as `cp LICENSE lib/LICENSE`, and with none named, every file, as a formatter
-    does; `uv add` and the like make the package files and the lockfile; `uv init DIR` makes the new files in DIR.
-    `git mv`, `git rm`, `mkdir`, `touch` and `echo` give no file's lines. **Apply the whole move** links a page of diffs,
-    from which nobody can build a file, so it gives none. A file deleted or renamed must be named."""
-    problems = []
-    for stop in facts["stops"]:
-        if not stop["moves"] and stop["start"]:
-            problems += gaps_of(stop["name"], of_mode(stop["parts"], "do"), stop["files"])
-        for move in stop["moves"]:
-            problems += gaps_of(move["name"], of_mode(move["parts"], "do"), move["files"])
-    return problems
-
-
-def apply_warnings(
-    facts: dict,  # The facts of a tutorial
-) -> list[str]:  # Each Apply this file said only in do mode
-    """Find a file to take whole that only Build it yourself says so: say it in the text for both ways of reading."""
-    out = []
-    for stop in facts["stops"]:
-        for move in stop["moves"]:
-            for part in move["parts"]:
-                if part["kind"] == "apply" and not part["whole"] and part["mode"] != "shared":
-                    out.append(f"{move['name']}: **Apply this file** for {part['path'] or 'a file'} is in a ::: {part['mode']} block alone; "
-                               "say a file to take whole in the text for both ways of reading")
-    return out
+) -> list[str]:  # Why Build it yourself cannot say how each file is made
+    """Check that Build it yourself can say how a student makes each file: a do$ line writes it, or the student changes it
+    by hand from its patch. timewalk runs the do$ lines to see which files they write; facts made with --no-run do not
+    say, so the page shows each whole diff instead. Where a file comes from is timewalk-check's to judge."""
+    if facts.get("observed"):
+        return []
+    moves = [move["name"] for stop in facts["stops"] for move in stop["moves"]
+             if any(p["kind"] == "command" and p["makes"] for p in move["parts"])]
+    if not moves:
+        return []
+    count = f"{len(moves)} part{'s' * (len(moves) != 1)}"
+    return [f"{moves[0]}: the do$ lines did not run, so Build it yourself cannot say which files they make ({count}); make the facts without --no-run"]
 
 
 def our_words(
     facts: dict,  # The facts of a walk
 ) -> list[str]:  # Each place where the text that a reader sees uses timewalk's words
-    """Find step, move, commit and Start in the prose that a reader reads, outside headings, code and links."""
+    """Find step, commit and Start in the prose that a reader reads, outside headings, code and links. "move" is the
+    reader's word too, once the intro of a tutorial has said what a move is."""
     problems = []
     places = [("the intro", facts["intro"])] + [(stop["name"], stop["parts"]) for stop in facts["stops"]] + [
         (move["name"], move["parts"]) for stop in facts["stops"] for move in stop["moves"]]
@@ -568,8 +475,8 @@ def our_words(
     places += [(move["name"], [{"kind": "prose", "mode": "shared", "text": move["title"]}]) for stop in facts["stops"] for move in stop["moves"]]
     for where, parts in places:
         for part in parts:
-            text = part.get("words", "") if part["kind"] == "item" else part.get("text", "") if part["kind"] in ("prose", "apply") else ""
-            for line in outside_code(APPLY.sub(" ", text)).split("\n"):   # the page says Apply in its own words
+            text = part.get("words", "") if part["kind"] == "item" else part.get("text", "") if part["kind"] == "prose" else ""
+            for line in outside_code(text).split("\n"):
                 if line.lstrip().startswith("#"):
                     continue
                 found = OUR_WORDS.search(line)
@@ -616,12 +523,12 @@ def check_class(
                 problems += 1
                 continue
             facts = load(out)
-            found = do_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
+            found = source_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
             for name, text in markdown_files(facts).items():
                 page = Path(scratch) / "page.md"
                 page.write_text(blank(text), encoding="utf-8")
                 found += [f"{name}: {problem}" for problem in check(page)[0]]
-            words = our_words(facts) + apply_warnings(facts)   # warnings: "commit" can be a word of the lesson, as in a lesson on git
+            words = our_words(facts)   # warnings: "commit" can be a word of the lesson, as in a lesson on git
             for problem in found:
                 print(f"walk {entry['id']}: {problem}")
             for word in words:
@@ -697,8 +604,8 @@ def main() -> int:  # The exit code
         parser.error("give FACTS, or --class")
     facts = load(args.facts)
     if args.check:
-        problems = do_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
-        words = our_words(facts) + apply_warnings(facts)
+        problems = source_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
+        words = our_words(facts)
         for problem in problems:
             print(f"walk {facts['walk']['id']}: {problem}")
         for word in words:

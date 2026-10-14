@@ -509,7 +509,7 @@ def plan_pages(
             if facts["errors"]:
                 raise Refused(f"timewalk-check finds errors in walk {ident}, so nothing is written. Run just check:\n  " + "\n  ".join(facts["errors"]))
             if facts["walk"]["kind"] == "tutorial":
-                gaps += len(render.do_gaps(facts))
+                gaps += len(render.source_gaps(facts))
             words += len(render.our_words(facts))
             for name, text in render.markdown_files(facts).items():
                 pages[walk / "walks" / ident / name] = text
@@ -521,12 +521,12 @@ def plan_pages(
             listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
     pages[walk / "walks" / "README.md"] = "\n".join([
         f"<!-- {render.MADE} -->", "", f"# The walks through {args.project}", "",
-        "Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
-        "gives every line to type and every command to run. A narrative has the first alone.", "", *listed, ""])
+        ("Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
+         "gives every command to run and every change to make by hand. A narrative has the first alone."), "", *listed, ""])
     if gaps or words:
-        files = "1 file that Build it yourself does not give" if gaps == 1 else f"{gaps} files that Build it yourself does not give"
         places = "1 place" if words == 1 else f"{words} places"
-        args.notices.append(f"the pages have {files} in full, and {places} with timewalk's words. just check lists them")
+        unrun = " The do$ lines did not run, so Build it yourself cannot say which files they make." if gaps else ""
+        args.notices.append(f"the pages have {places} with timewalk's words.{unrun} just check lists them")
     copied = {(walk / found[key]).resolve() for found in toc_walks(source) for key in ("notes", "intro", "shared") if found[key]}
     copied |= {(walk / Path(found["slides"]).parent).resolve() for found in toc_walks(source) if found["slides"]}
     for path, text in pages.items():

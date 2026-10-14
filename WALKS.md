@@ -26,8 +26,12 @@ step-02.2: a test of an empty text    move step-02.2
 step-02: the tests pass               tag step-02, move step-02.3
 ```
 
-- **Start the subject of each move with its name and a colon,** `step-NN.k:`. A wrong name is an error.
-- **Keep the subject `step-NN:` on the last commit of the step.** It carries the tag, and it is the last move.
+- **Make each move as small as it can be.** A move does one thing, a patch or one `do$` line. A file that a
+  command changes after a patch, as `chmod +x` does to a new hook, gets a move of its own.
+- **A move needs no name in its subject.** timewalk names it by its place between the tags, and its title
+  comes from its `###` heading. So `jj new` is enough to start the next move. A subject such as
+  `step-02.1: a test` still helps you read `git log`.
+- **The last commit of the step carries the tag.** It is the last move.
 - **The first step has no moves.** Give moves to the first steps after it, so that the class meets moves
   early. Keep at least one later step of one commit, with no moves.
 - **A tutorial takes every tag of its glob.** It cannot take `steps`. To take a part of a tutorial, write
@@ -44,7 +48,7 @@ every window. The key `moves` in `toc.toml` sets the mode that the walk starts i
 - **Do mode,** `moves = "do"`, the default. The learner makes each move by hand from its notes, and runs
   the command at the end of its section. **Done** marks the move made, or the page marks it when the
   learner's files match the commit of the move. **Catch me up** sets the code to the end of the move.
-  **Apply** types a git command into the shell, which makes the change of the move as edits.
+  A `patch$` line gives a button, **Apply patch**, that types `git apply` of the move's patch into the shell.
 - **Watch mode,** `moves = "watch"`. **Show** checks out the commit of each move. The learner reads the
   change, and runs the command at the end of its section.
 
@@ -208,6 +212,11 @@ shows it under "About this walk", in do mode, in watch mode and in a narrative. 
 window. The pages that students read put it before the first part. See
 [The pages that students read](#the-pages-that-students-read).
 
+The intro of every tutorial explains once what a move is. A move is one small change, made by one patch or one
+command. The learner makes each move, and the page checks the learner's files against it. After the intro, the
+text can use the word "move". See
+[Write for a reader who has never heard of timewalk](#write-for-a-reader-who-has-never-heard-of-timewalk).
+
 Give a small walk an intro that says which moves it leaves out between its parts. The file must be in the
 class folder. `just walk-update` copies it into the walk repository without the private lines, and `just style`
 checks it. timewalk does not start when the file of `intro` is missing.
@@ -240,7 +249,7 @@ slides = "walks/tutorial/slides/slides.toml"
 
 Write its notes in this way:
 
-- **Write the intro before the first `##`.** It takes the place of `intro`.
+- **Write the intro before the first `##`.** It takes the place of `intro`. Say there what a move is.
 - **Start each stop with `## Title`.** The words are the title of the stop, with no step name.
 - **Put in moves with include lines.** Write each on a line of its own, for example `{{include step-02.1}}`,
   `{{include step-02.2..step-02.3}}` or `{{include step-04}}`. The includes of a stop make one
@@ -296,8 +305,7 @@ These rules come from building timewalk-test. They hold for every walk.
   one test or one new function. The learner types it from the notes.
 - **Make each move work alone.** After each move, its anchor commands give the result that the notes state.
 - **Give an important command that needs timewalk's own check a move of its own.** timewalk compares the
-  learner's files with the commit of a move once for each move. **Your files match** and **Apply** work on
-  the whole move.
+  learner's files with the commit of a move once for each move. **Your files match** works on the whole move.
 - **A move that runs `uv add` or `uv lock` needs `loose`.** Write the command as a `do$` line. See
   [Files made with uv add](#files-made-with-uv-add).
 - **Let two or three less important commands share a move.** A shared command after their block checks
@@ -329,22 +337,27 @@ A learner reads the notes in timewalk, or on the pages that `just walk-update` m
 [The pages that students read](#the-pages-that-students-read). The reader knows the program, or wants to learn it.
 The reader does not know timewalk, and does not need to. These rules hold for every walk, a narrative too.
 
-- **Keep timewalk's words out of the text.** "step", "move", "commit", "Start", "Before the moves" and a name such
-  as `step-02.4` are timewalk's words. Do not write them in the text of the notes. The heading
-  `### step-02.1 Title` keeps its name, because timewalk needs it. Only its title is for the reader.
+- **Keep timewalk's words out of the text.** "step", "commit", "Start", "Before the moves" and a name such as
+  `step-02.4` are timewalk's words. Do not write them in the text of the notes. The heading `### step-02.1 Title`
+  keeps its name, because timewalk needs it. Only its title is for the reader.
+- **Explain a move once, in the intro of every tutorial.** Always write this explanation. The intro is the text
+  of the notes before the first step, or the file of `intro`. A move is one small
+  change, made by one patch or one command. The learner makes each move, and the page checks the learner's files
+  against it. After the intro, the text can use the word "move" anywhere. The intros of `walks/tutorial/notes.md`
+  and `walks/hooks/notes.md` in timewalk-test do it.
 - **Open a step with what we build, and why,** in terms of the program. For example, write "We cannot tell
-  whether `tally` still works after a change, so we write tests." Do not write "The moves of this step add tests."
+  whether `tally` still works after a change, so we write tests." Do not write "The commits of this step add tests."
 - **Open a move with the problem, and the change that solves it.** Do not open with "Now we add X". Do not open
   with a list of files, or with a link to a diff.
 - **Then give the change, piece by piece.** Each piece says in the shared text what it changes, and why. The
   shared text is the text outside the blocks for one mode. See [Write for both modes](#write-for-both-modes).
-  - **In do mode,** the learner makes the change from the page alone. Give the exact lines in a code block. Say
-    where they go, for example "after the line `X`", "in place of these lines" or "the whole file". Give each
-    command that makes the change as a `do$` line. Never describe an edit only in words.
+  - **Each file of the move comes from one line.** A `do$` line gives a command that writes it. A `patch$` line
+    names a file that the move changes by a patch. Do not copy the code into the notes. The code comes from the
+    project. See [Where each file comes from](#where-each-file-comes-from).
+  - **In do mode,** say what to read in each patch, and where in the file, for example "after the line `X`" or
+    "in place of the function `f`".
   - **In watch mode,** say what the change does, and where to see it. "Read the change of `pyproject.toml`."
     alone explains nothing.
-  - **For a file to take whole,** write **Apply this file** in the shared text. See
-    [A file to take whole](#a-file-to-take-whole).
 - **Then give the check.** Give a command, what it prints, and what that shows.
 - **Last, write `files:`,** with an item and its words for every file of the change, `uv.lock` too. Do not write
   a list of the files in prose, such as "The move changes these files:". The pages make that list from the facts
@@ -354,33 +367,66 @@ The reader does not know timewalk, and does not need to. These rules hold for ev
 
 The diffs are the data that the learner checks against. They help, but they are not the explanation. So the text
 above `files:` must explain the change without them. `just check` finds timewalk's words in the text, and each
-file that Build it yourself does not give in full. See [Check a class](#check-a-class).
+file of a move that no `do$` line writes and no `patch$` line names. See [Check a class](#check-a-class).
+
+### Where each file comes from
+
+A file of a move gets its content in one of two ways:
+
+- **A command writes it.** For example, `do$ uv add ruff` writes `pyproject.toml` and `uv.lock`.
+- **A patch brings it in.** The author changes the file by hand, and a `patch$` line names it. See
+  [patch$ lines](#patch-lines).
+
+The notes never copy code for the reader to type. Every diff and every file that a reader sees comes from the
+project's history, or from the learner's own files. `timewalk-check` tells the two ways apart. It runs the `do$`
+lines of each move at the commit before the move, in a scratch clone of the project. It notes the files that each
+line writes, and keeps the result in a cache, so the second check is fast. It warns of these cases:
+
+- A file that no `do$` line writes, and no `patch$` line names. Add `patch$ PATH`.
+- A file that a `do$` line writes and the move then changes. Add `patch$ PATH` for that change too.
+- A `do$` line that writes a file that the move does not change. The move and its commands disagree.
+- A `do$` line that fails at the commit before the move.
+
+The warnings mark a move that does not do one thing. For example, `do$ chmod +x hooks/pre-commit` fails before
+the move, when the move also brings in `hooks/pre-commit` by a patch. A file of the walk's `loose` that a `do$` line
+writes with newer versions, such as `uv.lock`, counts as the line's.
+
+The facts file says where each file comes from, and Build it yourself shows it. A file of a command says which
+command. A patch is open, to make by hand. `timewalk-check --no-run` runs nothing, and checks only the moves
+without `do$` lines. A `patch$` line that names a file that the move does not change is an error.
 
 See https://rahuldave.com/timewalk/authoring.html#write-for-a-reader-who-has-never-heard-of-timewalk.
 
-### A file to take whole
+### patch$ lines
 
-Some changes take a whole file, for example a new file, or a change too long to type. Say so in the shared text,
-for both modes, with **Apply this file**. Name the file in backticks in the same sentence, and say which lines to
-take, or "the whole file":
+A line `patch$ PATH` says that the move changes the file `PATH` by a patch, the diff of the move's commit. Put
+it in the section of the move, in the shared text, after the words that explain the change. Write a path with a
+space in backticks, for example ``patch$ `my file.py` ``.
 
 ```markdown
-`scripts/corpus.py` writes the corpus, a text of 2000 words. The file is too long to type, so take the
-whole file `scripts/corpus.py` with **Apply this file**.
+`just check` works only when someone runs it. A hook runs it every time. The hook, `hooks/pre-commit`, has
+three lines. The file comes whole, as a patch.
+
+patch$ hooks/pre-commit
 ```
 
-- **In timewalk,** the **Apply** bar shows in do mode only. In watch mode the file is already there, and the
-  sentence says that it came whole.
-- **On the pages,** the sentence links to the whole file as the change left it, in both ways of reading. The name
-  of the file in backticks becomes the link, and the words "with **Apply this file**" go. The example above reads
-  "so take the whole file `scripts/corpus.py`", with a link. A sentence that does not name the file gets a link in
-  place of the two bold words.
-- **Apply is a shortcut, and never the only way.** The learner can also copy the file from the link.
+- **In timewalk, in do mode,** the line shows **Apply patch**, which types `git apply` of the patch into the
+  shell. If the learner has changed the file, it shows **Replace with the move's file** instead. That button
+  first keeps the learner's version on a branch `timewalk/saved/<move>-yours`. Neither button merges, so a file
+  never gets conflict markers.
+- **In timewalk, in watch mode,** the line reads "A patch to PATH", with **See diff**.
+- **On the pages,** Read the tutorial shows "A patch to `PATH`.", linked to the file in What changed. Build it
+  yourself shows "Apply the patch to `PATH`:", and a command that applies the patch from GitHub. See
+  [The pages that students read](#the-pages-that-students-read).
+- **The learner can also make the change by hand.** The match marks the move done when the files match.
 
-Do not put the sentence in a `do` block only. Then a reader of watch mode never learns that the file came whole.
-Do not write **Apply the whole move** for a file to take whole. On the pages it links a page of diffs, and nobody
-can make a file from a diff. So `just check` does not count it as a file given in full. `just check` warns of
-**Apply this file** in a `do` block alone.
+A file that a `do$` line writes needs no `patch$` line. If the move then changes that file further, it needs a
+`patch$` line too. A command on a file that a patch brings in gets a move of its own. In timewalk-test, the move
+`hooks-01.2` brings in `hooks/pre-commit` by `patch$ hooks/pre-commit`. The next move, `hooks-01.3`, is
+`do$ chmod +x hooks/pre-commit` alone.
+
+`just check` warns of a `patch$` line in a `do` or `watch` block, or before the first move of a step. It also
+warns of a sentence that asks for **Apply this file** or **Apply the whole move**, which timewalk no longer has.
 
 ### The notes of a tutorial
 
@@ -392,9 +438,9 @@ Give each move a section `### step-NN.k Title`, in the order of the commits. Eac
 this order:
 
 - **The problem, and the change that solves it,** in the shared text, for both modes.
-- **The change, piece by piece.** Give the lines to type in a `do` block, with where they go. A command that
-  makes the move is a `do$` line in the shared text. In a `watch` block, say what the change does, and where to
-  see it. See [Write for both modes](#write-for-both-modes).
+- **The change, piece by piece.** Each file comes from a `do$` line or a `patch$` line, in the shared text. In a
+  `do` block, say what to read in each patch, and where in the file. Copy no code. In a `watch` block, say what the
+  change does, and where to see it. See [Write for both modes](#write-for-both-modes).
 - **One or more anchor commands, in the shared text.** An anchor command is the check of the move. Make it safe
   to run again, and say what it prints and what that shows. A test that fails is a good anchor, if the notes say
   that it fails. The notes column shows the anchor commands under the label "Check it".
@@ -437,13 +483,13 @@ narrative has no mode, and shows the `watch` blocks.
   these parts:
   - the problem, and the change that solves it, before the blocks
   - the explanation of each piece of the change
-  - a sentence with **Apply this file**, for a file to take whole
+  - a `patch$` line for each file that the move changes by a patch
   - each command that makes the move, as a `do$` line
   - the commands that check the result, and what they print
   - last, the line `files:` with its items and `show:` lines
-- **Put in a block only what differs.** A `do` block gives the exact lines to type, and says where they go. It
-  gives each new file whole, in a code block. A `watch` block says what the change does, and names the file and
-  the line to look at.
+- **Put in a block only what differs.** A `do` block says what to read in each patch, and where in the file. It
+  copies no code. A `watch` block says what the change does, and names the file and the
+  line to look at.
 - **Write a command that makes the move as a `do$` line in the shared text.** Do mode is for the learner to run,
   and watch mode is for the learner to watch. A command makes the move if it changes the files to what the commit
   of the move has. Examples are `uv add`, `uv lock`, `git rm`, `ruff check --fix` and `chmod +x`. In do mode, a
@@ -453,11 +499,11 @@ narrative has no mode, and shows the `watch` blocks.
 - **Keep the anchor commands in the shared text.** With an anchor in a `do` block, the move has no command in
   watch mode, and `just check` warns. A `do$` line is never an anchor. A move whose only commands are `do$` lines
   has no anchor, and `just check` warns of it too.
-- **Put no `do$` line in a block.** `just check` warns of it, because a `do$` line shows in both modes.
+- **Put no `do$` or `patch$` line in a block.** `just check` warns of it, because these lines show in both modes.
 - **Close each block, and put no heading and no other block in it.** `just check` reports an error otherwise.
 
-The example follows every rule. It opens with the problem, gives the exact file in do mode, and says what to
-look at in watch mode. Then it gives the check, and last an item for every file, `uv.lock` too. The walk sets
+The example follows every rule. It opens with the problem, gives a `do$` line and a `patch$` line, says what to
+read in do mode, and says what to look at in watch mode. Then it gives the check, and last an item for every file, `uv.lock` too. The walk sets
 `loose`, because the move runs `uv add`. See [Files made with uv add](#files-made-with-uv-add).
 
 ````markdown
@@ -468,18 +514,13 @@ tries it for us. pytest finds the tests of the project and runs them, so we add 
 
 do$ uv add --group test pytest
 
-The command puts pytest in a group `test` of `pyproject.toml`, and its exact version in `uv.lock`.
+The command puts pytest in a group `test` of `pyproject.toml`, and its exact version in `uv.lock`. The first
+test comes in a file of its own, `tests/test_count.py`, as a patch.
+
+patch$ tests/test_count.py
 
 ::: do
-Make the file `tests/test_count.py`, with these lines:
-
-```python
-from tally import count
-
-
-def test_counts_each_word():
-    assert count("a b a") == {"a": 2, "b": 1}
-```
+Read its one test, `test_counts_each_word`, before you run it.
 :::
 
 ::: watch
@@ -499,7 +540,8 @@ files:
 ````
 
 The tutorial of timewalk-test, `walks/tutorial/notes.md`, has blocks in every move. The walk `hooks` of
-timewalk-test makes its hook executable with `do$ chmod +x hooks/pre-commit`, in `walks/hooks/notes.md`.
+timewalk-test brings in its hook with `patch$ hooks/pre-commit` in one move, and makes it executable with
+`do$ chmod +x hooks/pre-commit` in the next, in `walks/hooks/notes.md`.
 
 See https://rahuldave.com/timewalk/authoring.html#write-for-both-modes and
 https://rahuldave.com/timewalk/walks.html#do-mode-and-watch-mode.
@@ -555,8 +597,8 @@ Run these in the class folder, in this order:
    commit. `just draft ID --write` adds them to the notes. The option `--blocks` is still accepted, and changes
    nothing. Finish each draft by hand, by the rules of
    [Write for a reader who has never heard of timewalk](#write-for-a-reader-who-has-never-heard-of-timewalk).
-   Write the problem and the change, the lines to type, what to look at, the anchor, the words of each item and
-   the `show:` lines. Then run `just check` again.
+   Write the problem and the change, where to make each change, what to look at, the anchor, the words of each
+   item and the `show:` lines. Then run `just check` again.
 3. **Run every command of the notes at its commit.**
    - Run a command of a narrative at its tag.
    - Run a command of a tutorial before its first move at the tag before the step.
@@ -572,7 +614,7 @@ Run these in the class folder, in this order:
 
 A student can read each walk without timewalk, on GitHub or on the website of the walk repository.
 `just walk-update` makes these pages from the notes. The pages are for a reader who has never heard of timewalk, so
-they never name timewalk's steps, moves or commits.
+they never name timewalk's steps or commits. They name a move, which the intro of a tutorial explains.
 
 ### Two ways of reading
 
@@ -580,8 +622,9 @@ A tutorial has two ways of reading, from the same notes:
 
 - **Read the tutorial** explains each change, with the code to look at. It holds the shared text and the `watch`
   blocks, as watch mode does. A command that made the change shows as a sentence, with nothing to run.
-- **Build it yourself** gives every line to type and every command to run, so that the student makes the project.
-  It holds the shared text and the `do` blocks, as do mode does.
+- **Build it yourself** gives every command to run and every patch to apply, so that the student makes the
+  project. It holds the shared text and the `do` blocks, as do mode does. Its patches come from the facts
+  file, never from code in the notes.
 
 A narrative has one way of reading, Read the tutorial. The app keeps its own switch, **Do** and **Watch**.
 
@@ -591,15 +634,25 @@ Each part of the pages ends with a section **What changed**. The section is the 
 learns it once:
 
 - every file of the change, with the words of its `files:` item, or else the names of the functions, classes and
-  recipes that the change adds, changes or removes. Then come its counts of lines, and a link to the file as the
-  change left it.
-- the whole diff of each file, folded. A lockfile, such as `uv.lock`, and a binary file get no diff.
+  recipes that the change adds, changes or removes. Then come its counts of lines, the `do$` line that writes it,
+  and a link to the file as the change left it.
+- the whole diff of each file, folded. A lockfile, such as `uv.lock`, and a binary file get no diff. In Build it
+  yourself, each patch is open: the whole diff of a file that no `do$` line writes, and the lines that the move
+  changes after the `do$` line that writes a file.
 - a link to the change on GitHub, and a link to the code after it
+
+In Build it yourself, the diffs under What changed are open, with a summary. A patch reads "The patch to
+`PATH`". A file that a `do$` line writes and the move then changes reads "After `CMD`, the patch to `PATH`".
 
 The text above What changed explains the change, and What changed is the data that the reader checks against. Two
 forms of the notes become links on the pages:
 
-- **Apply this file** becomes a link to the file as the change left it. See [A file to take whole](#a-file-to-take-whole).
+- A `patch$` line becomes "A patch to `PATH`." in Read the tutorial, with a link to the file in What changed. In
+  Build it yourself, it becomes "Apply the patch to `PATH`, from the top of the project:", and a command that
+  applies the patch from GitHub, `curl -sL https://github.com/OWNER/NAME/commit/SHA.diff | git apply --include=PATH`.
+  For a part of several commits, the address is `OWNER/NAME/compare/BASE...SHA.diff`. A file that a `do$` line
+  writes first gets no command, as the whole change would not apply on top of it. Its line says "Then change `PATH`
+  as its patch shows", and its patch is open under What changed. See [patch$ lines](#patch-lines).
 - "the change of `X`", with `X` a file of the change, becomes a link to the entry of `X` in What changed.
 
 ### How the pages are made
@@ -656,41 +709,22 @@ problem, and the exit code is 1 if it finds one. It also prints warnings, which 
 
 | Problem | Example of the report | Fix |
 |---|---|---|
-| A file that Build it yourself does not give in full | `step-02.1: Build it yourself does not give all of tests/test_count.py; the first line missing is ...` | Put the line in a code block of the move, in the shared text or in the `do` block. Or say to take the whole file with **Apply this file**. A binary file always needs **Apply this file** |
+| Facts made without running the `do$` lines | `step-03.1: the do$ lines did not run, so Build it yourself cannot say which files they make` | Make the facts without `--no-run`, and without `TIMEWALK_NO_RUN` set |
 | A page against the writing guide | `build.md: HARD 8: 31 words (at most 25): ...` | Fix the text of the notes that the page shows, often the words of an item. The page comes from the notes |
 
-The warnings are of two kinds:
+The warnings are of one kind:
 
-- **timewalk's words in the text that a reader sees**, for example `warning: step-02.1: "move" in: Now we add a test
-  in this move`. Say it in the words of the program. The check reads the text, the words of each item and the
-  titles, and skips headings, code, the addresses of links and HTML comments. It finds "step", "move" and
-  "commit" in any case, and "Start" inside a sentence. "Start the server" is a verb, and passes. A lesson on git
+- **timewalk's words in the text that a reader sees**, for example `warning: step-02.1: "step" in: Now we add a test
+  in this step`. Say it in the words of the program. The check reads the text, the words of each item and the
+  titles, and skips headings, code, the addresses of links and HTML comments. It finds "step" and "commit" in any
+  case, and "Start" inside a sentence. "Start the server" is a verb, and passes. A lesson on git
   can need the word "commit", so this is a warning and not a problem.
-- **Apply this file in a `do` block alone.** Say a file to take whole in the shared text.
 
-These rules say what Build it yourself gives in full. The check reads each move, and each part with no moves after
-the first:
+Where each file of a move comes from is `timewalk-check`'s to judge. See
+[Where each file comes from](#where-each-file-comes-from).
 
-- **A code block of the move** gives each line that it holds. Every line that the change adds to the file must be
-  in a code block. A code block inside an HTML comment gives nothing, as the page does not show it. A file that only
-  loses lines needs no code.
-- **A file deleted or renamed** must be named in the text or in a `do$` line, such as `do$ git rm old.py`.
-- **Apply this file** gives the whole file that its sentence names.
-- **A `do$` line** gives files in three cases. Only a `do$` line counts, because the notes write every command that
-  makes a change as one. A `$` line gives nothing.
-  - `cp`, `mv`, `install`, `ln`, `curl`, `wget`, `tar` and `unzip` give the files that the line names, for example
-    `do$ cp LICENSE lib/LICENSE`.
-  - A formatter or a fixer that names no file of the change gives every file, for example `do$ just fmt` or
-    `do$ ruff check --fix`.
-  - `uv add`, `uv remove`, `uv lock`, `uv sync` and `uv python pin` give `pyproject.toml`, `.python-version` and the
-    lockfile. `uv init DIR` gives the new files in `DIR`.
-- **Any other `do$` line**, such as `chmod +x`, `git mv`, `git add` or `mkdir`, gives none of the lines of a file.
-- **Apply the whole move** gives nothing, because it links a page of diffs.
-- **A lockfile** needs nothing.
-
-`just walk-update` runs the check of Build it yourself and the check of timewalk's words too, and says how many
-each finds. It writes the pages all
-the same. `just check` lists each problem.
+`just walk-update` runs the checks of the pages too, and says how many it finds. It writes the pages all the same.
+`just check` lists each problem.
 
 ### A class made before the pages
 

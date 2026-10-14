@@ -23,14 +23,16 @@ The guide asks for a glossary of the project's terms. Use each term in the same 
 | Watch mode | The mode of a tutorial in which timewalk checks out the commit of each move |
 | Shared text | The text of the notes outside the blocks `::: do` and `::: watch`, which both modes show |
 | Anchor command | A command at the end of a move that checks it. timewalk shows it under "Check it" |
-| Apply this file | The words in the notes for a file to take whole. timewalk shows a button, and the pages a link to the file |
+| patch$ line | A line `patch$ PATH` in the shared text of a move. It says that the move changes `PATH` by a patch, the diff of the move's commit |
+| Apply patch, Replace with the move's file | The buttons of a `patch$` line in do mode. Apply patch applies the patch to the learner's file. Replace keeps the learner's file on a saved branch, then takes the move's file |
 | Facts file | The JSON file that `timewalk-export --json` writes for a walk. The pages are made from it |
 | The pages that students read | The pages of each walk, on GitHub and on the website of the walk repository, to read without timewalk |
 | Read the tutorial | The way of reading the pages that explains each change. It holds what watch mode shows |
-| Build it yourself | The way of reading the pages that gives every line to type and every command to run. It holds what do mode shows |
+| Build it yourself | The way of reading the pages that gives every command to run and every patch to apply. It holds what do mode shows |
 | What changed | The section at the end of each part of the pages: every file of the change, its diff and its links |
 
-The pages that students read never use the terms step, move, commit or Start. Those terms are for the teacher.
+The pages that students read never use the terms step, commit or Start. Those terms are for the teacher. The
+pages can use the term move, because the intro of each tutorial explains it.
 
 ## Check the prose
 

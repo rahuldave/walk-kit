@@ -26,7 +26,7 @@ A student can also read each walk without timewalk, on GitHub or on the website 
 ways of reading:
 
 - **Read the tutorial** explains each change, with the code to look at. It is timewalk's watch mode.
-- **Build it yourself** gives every line to type and every command to run. It is timewalk's do mode.
+- **Build it yourself** gives every command to run and every patch to apply. It is timewalk's do mode.
 
 A narrative has Read the tutorial only. Each part ends with **What changed**. What changed lists every file of the
 change, with its words from the notes, its counts of lines and a link to the file. Then come the diff of each file,

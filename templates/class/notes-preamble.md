@@ -20,11 +20,12 @@ notes column of its page, every line of it.
 - **A move of a tutorial** has a section of its own, `### step-NN.k Title`, under its step. `WALKS.md` in the walk
   skill says what the section holds.
 - **Write for a reader who has never heard of timewalk.** Students also read these notes as pages, on GitHub and
-  on a website. Keep the words "step", "move", "commit" and "Start" out of the text. Open a step with what we build
+  on a website. Keep the words "step", "commit" and "Start" out of the text. The intro of a tutorial says once what a
+  move is, one small change made by one patch or one command. After it, the text can use the word "move". Open a step with what we build
   and why. Open a move with the problem and the change that solves it. Then give the change piece by piece, the
   check, and last `files:`, with an item for every file, `uv.lock` too. `WALKS.md` in the walk skill gives the rules.
-- **A file to take whole** is said in the text for both modes, with **Apply this file**. The pages then link the
-  whole file.
+- **Each file of a move comes from one line,** a `do$` line or a `patch$` line, in the text for both modes. A line
+  `patch$ PATH` says that the move changes `PATH` by a patch. The notes copy no code.
 - **Write by the guide.** These notes follow the nossaifd writing guide, `style/GUIDE.md` in the walk skill.
   `just style` checks them. A command line and code keep their own form. The words of each item under `files:` are
   prose, and follow the guide.

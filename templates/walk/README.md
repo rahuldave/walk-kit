@@ -9,7 +9,7 @@ their commands.
 
 If this repository has a `toc.toml`, each walk is also a set of pages, to read on GitHub or on its website. There are two ways to
 read a tutorial. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** gives
-every line to type and every command to run, so that you make the project yourself. Each part of the pages ends
+every command to run and every patch to apply, so that you make the project yourself. Each part of the pages ends
 with **What changed**. It lists every file of the change, with a link to the file and its whole diff.
 
 [The pages on GitHub](walks/README.md) list each walk with its two ways of reading. The same pages are a website,
@@ -67,7 +67,7 @@ A walk is a narrative or a tutorial. A narrative goes from step to step. A tutor
 small commits between two steps.
 
 In do mode, you make each move by hand from its notes, run the command at
-its end, and press **Done**. **Catch me up** sets the code to the end of the move. In watch mode, **Show**
+its end, and press **Done**. A patch in the notes has a button, **Apply patch**, that applies it to your file. **Catch me up** sets the code to the end of the move. In watch mode, **Show**
 checks out each move. The moves of a step go in order. To go back, press **Restart step**, and then run
 `just setup`.
 

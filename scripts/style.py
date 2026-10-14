@@ -11,8 +11,11 @@ toc.toml, or else notes.md with slides/slides.toml. This docstring is the one pl
 
 The checker reads a copy of each file in which the forms that the notes own are blank lines, so each line keeps its
 number. Those forms are a command line, such as `$ just setup` or `runs$ uv run train`, and a line `time: m:ss`. The
-words of each item under `files:` are checked as prose: the pages show them under What changed. check.py itself is a
-copy from nossaifd, and stays as it is.
+words of each item under `files:` are checked as prose: the pages show them under What changed.
+
+The checker is nossaifd's own `check.py` when a clone of nossaifd is on this machine: the folder that `$NOSSAIFD` names,
+or `nossaifd` beside walk-kit. Otherwise it is the copy in `style/check.py`, which `style_sync.py` keeps in step with
+nossaifd. A copy that differs from the clone is named, so that it does not fall behind unseen.
 """
 
 import argparse
@@ -24,13 +27,30 @@ from pathlib import Path
 
 from common import TocError, toc_walks
 
-CHECKER = Path(__file__).resolve().parent.parent / "style" / "check.py"
+COPY = Path(__file__).resolve().parent.parent / "style" / "check.py"
+
+
+def nossaifd() -> Path | None:  # A clone of nossaifd on this machine, or None
+    """Find nossaifd: the folder that $NOSSAIFD names, or nossaifd beside walk-kit."""
+    import os
+
+    for folder in (os.environ.get("NOSSAIFD"), COPY.parent.parent.parent / "nossaifd"):
+        if folder and (Path(folder) / "check.py").is_file():
+            return Path(folder)
+    return None
+
+
+CLONE = nossaifd()
+CHECKER = CLONE / "check.py" if CLONE else COPY
 COMMAND = re.compile(r"^\s*[A-Za-z0-9_]*\$(\s|$)")  # $ cmd, runs$ cmd, main$ cmd
 TIME = re.compile(r"^\s*time:\s*\d")
 
 
-def checker() -> object:  # The module style/check.py
-    """Load the checker as a module, as it is."""
+def checker() -> object:  # The module check.py, nossaifd's own or the copy
+    """Load the checker as a module, as it is, and say when the copy differs from nossaifd's."""
+    if CLONE and COPY.read_bytes() != CHECKER.read_bytes():
+        print(f"style: walk-kit's style/check.py differs from nossaifd's, in {CLONE}; this check uses nossaifd's. "
+              "Run scripts/style_sync.py --write to copy it", file=sys.stderr)
     spec = importlib.util.spec_from_file_location("nossaifd_check", CHECKER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

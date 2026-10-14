@@ -14,7 +14,7 @@ A walk uses three repositories for a project called `bla`:
 | `bla-walk` | The walk: the notes without private cues, the slides, a justfile | Public. Students fork it |
 
 A walk is one path through the steps, with its own notes and slides. A narrative goes from tag to tag. A
-tutorial also stops at each move, a small commit `step-NN.k:` between two tags. In do mode, the learner
+tutorial also stops at each move, a small commit between two tags, named `step-NN.k` by its place. In do mode, the learner
 makes each move by hand. In watch mode, timewalk checks out the commit of each move. The notes of a
 tutorial hold a block for each mode, `::: do` and `::: watch`.
 
@@ -155,14 +155,20 @@ cues included. To show a cue to students, start it with another word, for exampl
 
 ## Rules
 
-- **Write the notes for a reader who has never heard of timewalk.** Keep the words "step", "move", "commit" and
-  "Start" out of the text. Open a step with what we build and why. Open a move with the problem and the change that
-  solves it. Then give the change piece by piece. Give the exact lines in a code block in do mode, and say what to
-  look at in watch mode. Then give the check, and last `files:`, with an item for every file, `uv.lock` too. Write no list of
+- **Explain a move once, in the intro of every tutorial.** Write it yourself, in the words of the class. A move is
+  one small change, made by one patch or one command. The learner makes each move, and the page checks the
+  learner's files against it. After the intro, the text can use the word "move" anywhere.
+- **Write the notes for a reader who has never heard of timewalk.** Keep the words "step", "commit" and "Start"
+  out of the text. Open a step with what we build and why. Open a move with the problem and the change that
+  solves it. Then give the change piece by piece. In do mode, say what to read in each patch, and where; copy no
+  code, as the patch comes from the project. Say what to look at in watch mode. Then give the check, and last `files:`, with an item for every file, `uv.lock` too. Write no list of
   the files in prose. WALKS.md, in "Write for a reader who has never heard of timewalk", gives the rules and an example.
-- **Say a file to take whole with Apply this file, in the shared text.** For a new file, or one too long to type,
-  write **Apply this file** in the shared text, and never only in a `do` block. Then both ways of reading
-  link the whole file.
+- **A move's file comes from a `do$` line or a `patch$` line.** A line `patch$ PATH`, in the shared text, says
+  that the move changes `PATH` by a patch. `timewalk-check` runs the `do$` lines to see which files they write.
+  It warns of a file that no `do$` line writes and no `patch$` line names. WALKS.md, in "Where each file comes from"
+  and "patch$ lines", says how.
+- **Make each move do one thing,** a patch or one `do$` line. A command on a file that a patch brings in, such as
+  `chmod +x`, gets a move of its own.
 - **Ask before you create a repository on GitHub, before every commit, and before every push.**
 - **Plan a tutorial's moves with its blocks.** timewalk checks the learner's files once for each move. So an
   important command that needs that check gets a move of its own. WALKS.md, in "How small to make a move" and

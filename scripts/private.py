@@ -9,7 +9,7 @@ of a notes file, cues included, so `walk-update` leaves these lines out of the w
 - the whole blockquote of the cue: every line from its first `>` line on that starts with `>`, a line of `>` alone
   too, and the lines that go on the paragraph without a `>`, up to a blank line. Lines before the cue in the same
   blockquote go too. A line without a `>` that starts a block of its own ends the blockquote, and stays: a heading, a
-  fence, a list item, HTML, a command, a planned time, or the `:::` line of a block for one mode. A line with `-->` ends it too. It goes with the cue, but its
+  fence, a list item, HTML, a command, a patch$ line, a planned time, or the `:::` line of a block for one mode. A line with `-->` ends it too. It goes with the cue, but its
   `-->` stays, so that an HTML comment around a cue is still closed
 - a planned time: a line `time: m:ss`, also when it is indented. Only the presenter's clock band uses it
 
@@ -43,9 +43,9 @@ CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")  # a line that can close one
 QUOTED = re.compile(LEAD + ">")  # a line of a blockquote
 LABEL = re.compile(LEAD + r"(?:>\s*)+[*_]{0,2}[A-Z][A-Za-z]*\s*[*_]{0,2}\s*:")  # a cue of one word, such as > Try:
 # A line that starts a block of its own, so it does not go on a paragraph: a heading, a fence, a list item, a
-# thematic break, HTML, a command for a terminal, a planned time, or the fence of a block (`::: do`, `:::`). It ends a
+# thematic break, HTML, a command for a terminal, a patch$ line, a planned time, or the fence of a block (`::: do`, `:::`). It ends a
 # blockquote when it has no `>`
-NEW_BLOCK = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|```|~~~|[-*+]\s|\d+[.)]\s|(?:---|\*\*\*|___)\s*$|<|(?:main|runs[2-9]?|do)?\$\s|time:)|^:{3,}\s*(?:\{[^}]*\}|[\w-]+)?\s*$")
+NEW_BLOCK = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|```|~~~|[-*+]\s|\d+[.)]\s|(?:---|\*\*\*|___)\s*$|<|(?:main|runs[2-9]?|do|patch)?\$\s|time:)|^:{3,}\s*(?:\{[^}]*\}|[\w-]+)?\s*$")
 
 
 def fenced(
@@ -133,18 +133,38 @@ def in_code(
 def public(
     text: str,  # The class notes
     start: int = 0,  # The index of the first line to keep, from 0: the lines before it go too
-) -> str:  # The same notes without the private lines, and with no run of blank lines left behind
-    """Drop the private lines and the extra blank lines they leave, keeping the `-->` of a comment that a kept line opened."""
+) -> str:  # The same notes without the private lines; every other character as it was
+    """Drop the private lines, keeping the `-->` of a comment that a kept line opened. A run of private lines between two
+    blank lines takes one of them with it, so that no blank line is left twice where it stood; nothing else changes."""
     drop = set(private_lines(text))
-    kept, comment = [], False  # comment: a kept line opened an HTML comment that is not closed yet
+    lines: list[tuple[str, bool]] = []  # each line from start, and whether it goes
+    comment = False  # a kept line opened an HTML comment that is not closed yet
     for at, line in enumerate(text.split("\n")):
         if at < start:
             continue
         if at not in drop:
-            kept.append(line)
+            lines.append((line, False))
             if "<!--" in line or "-->" in line:
                 comment = line.rfind("<!--") > line.rfind("-->") or (comment and "-->" not in line)
         elif comment and "-->" in line:
-            kept.append(re.match(r"\s*", line).group() + "-->")
+            lines.append((re.match(r"\s*", line).group() + "-->", False))
             comment = False
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept))
+        else:
+            lines.append((line, True))
+    gone = [goes for _, goes in lines]
+    at = 0
+    while at < len(lines):
+        if not lines[at][1]:
+            at += 1
+            continue
+        end = at
+        while end + 1 < len(lines) and lines[end + 1][1]:
+            end += 1
+        before = at == 0 or not lines[at - 1][0].strip()
+        after = end + 1 < len(lines) and not lines[end + 1][0].strip()
+        if before and after:
+            gone[end + 1] = True   # the blank line after the run: the one before stays, and separates as it did
+        elif at == 0 and end + 1 < len(lines) and after:
+            gone[end + 1] = True
+        at = end + 1
+    return "\n".join(line for (line, _), goes in zip(lines, gone, strict=True) if not goes)

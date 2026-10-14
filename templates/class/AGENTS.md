@@ -31,9 +31,10 @@ narrative and a tutorial need, and the rules of `just setup`.
   `$ just setup`.
 - **Rehearse every command** in the replay copy, at its step or at its move in a tutorial. Then put it into the notes.
 - **Write for a reader who has never heard of timewalk.** Students also read the notes as pages, without timewalk.
-  Keep the words "step", "move", "commit" and "Start" out of the text. Give the problem and the change first. Then
-  give the change piece by piece, and the check. Last, give `files:` with an item for every file. Say a file to take whole
-  with **Apply this file**, in the text for both modes. `WALKS.md` in the walk skill gives the rules.
+  Keep the words "step", "commit" and "Start" out of the text. Explain a move once, in the intro of each tutorial. A move
+  is one small change, made by one patch or one command, which the page checks. Then the text can use the word "move". Give the problem and the change first. Then
+  give the change piece by piece, and the check. Last, give `files:` with an item for every file. Give each file of a
+  move a `do$` line or a `patch$` line, in the text for both modes. `WALKS.md` in the walk skill gives the rules.
 - **No colon before a command.** Write "The last command undoes them", and not "Undo them with:".
 - **Write by the guide.** Everything here follows the nossaifd writing guide, `style/GUIDE.md` in the walk skill. Read
   it before you write. `just style` checks the prose. Fix every hard problem before a commit.
