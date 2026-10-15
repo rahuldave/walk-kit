@@ -367,27 +367,68 @@ class FirstPart(Case):
 
 
 class IndexCommands(unittest.TestCase):
-    "A git rm or git mv on a page fails for a student who never commits, so the check of a class names it."
+    "A git rm or git mv on a page fails for a student who never commits when git's index does not hold the file, so the check of a class names it."
 
-    def facts(self, *texts: str) -> dict:
-        "Facts of one move with these commands."
-        parts = [{"kind": "command", "text": text, "makes": True, "mode": "shared"} for text in texts]
-        return {"stops": [{"moves": [{"name": "step-01.1", "parts": parts}]}]}
+    def facts(self, *texts: str, before: list[dict] = (), writes: list[str] | None = None) -> dict:
+        "Facts of a walk: a move that changes the files before, then a move with these commands, the first a do$ line that writes writes."
+        parts = [{"kind": "command", "text": text, "makes": not n, "mode": "shared", "writes": writes if not n else None}
+                 for n, text in enumerate(texts)]
+        moves = [{"name": "step-01.1", "parts": [], "files": list(before)}, {"name": "step-01.2", "parts": parts, "files": []}]
+        return {"walk": {"kind": "tutorial", "loose": []},
+                "stops": [{"name": "step-01", "start": "a" * 40, "commit": "b" * 40, "parts": [], "files": [], "moves": moves}]}
 
-    def test_found(self) -> None:
-        "git rm, git mv, and either after && are named."
-        found = render.index_commands(self.facts("git rm old.py", "git mv a.py b.py", "uv lock && git rm -r build"))
-        self.assertEqual(len(found), 3, found)
-        self.assertIn("Write `mv`", found[1])
+    def file(self, path: str, status: str, old: str | None = None) -> dict:
+        "A file of a change."
+        return {"path": path, "status": status, "old_path": old}
+
+    def test_untouched_files_pass(self) -> None:
+        "git rm and git mv of files that the walk has not changed work for a student: the repro's git mv of a test from before the walk."
+        self.assertEqual(render.index_commands(self.facts("git mv tests/test_empty.py tests/test_blank.py", "git rm old.py", "git rm -r build")), [])
+
+    def test_rm_of_a_changed_file(self) -> None:
+        "git rm of a file that an earlier move added or changed is named, with the reason."
+        for status in ("added", "modified"):
+            found = render.index_commands(self.facts("git rm app.py", before=[self.file("app.py", status)]))
+            self.assertEqual(len(found), 1, found)
+            self.assertIn("`app.py`", found[0])
+            self.assertIn("Write `rm`", found[0])
+
+    def test_rm_force(self) -> None:
+        "git rm -f of a file that git tracks works, and of a file that the walk added does not."
+        modified = self.facts("git rm -f app.py", before=[self.file("app.py", "modified")])
+        self.assertEqual(render.index_commands(modified), [])
+        self.assertEqual(len(render.index_commands(self.facts("git rm -qf app.py", before=[self.file("app.py", "added")]))), 1)
+
+    def test_mv(self) -> None:
+        "git mv of a file that the walk added is named; of a file that it changed, or renamed from a file the walk did not add, passes too."
+        self.assertEqual(len(render.index_commands(self.facts("git mv -v new.py b.py", before=[self.file("new.py", "added")]))), 1)
+        self.assertEqual(render.index_commands(self.facts("git mv app.py b.py", before=[self.file("app.py", "modified")])), [])
+        self.assertEqual(render.index_commands(self.facts("git mv -- app.py old.py b/", before=[self.file("x.py", "added")])), [])
+        self.assertEqual(len(render.index_commands(self.facts("git mv b.py c.py", before=[self.file("b.py", "renamed", "a.py")]))), 1)
+
+    def test_folder_and_glob(self) -> None:
+        "A folder or a glob is named when it holds a file that fails, and the problem says which file."
+        before = [self.file("src/app.py", "modified")]
+        for text in ("git rm -r src", "git rm -r src/", "uv lock && git rm 'src/*.py'", "git rm -r ."):
+            found = render.index_commands(self.facts(text, before=before))
+            self.assertEqual(len(found), 1, text)
+            self.assertIn("`src/app.py`", found[0])
+            self.assertIn("names it", found[0])
+        self.assertEqual(render.index_commands(self.facts("git rm -r lib 'docs/*.md'", before=before)), [])
+
+    def test_earlier_in_the_move(self) -> None:
+        "A do$ line earlier in the move that writes a file: git rm of it is named, and git mv of it too, as git does not track it."
+        self.assertEqual(len(render.index_commands(self.facts("make", "git rm out.txt", writes=["out.txt"]))), 1)
+        self.assertEqual(len(render.index_commands(self.facts("make", "git mv out.txt o.txt", writes=["out.txt"]))), 1)
 
     def test_others_pass(self) -> None:
         "rm, mv, git restore and a word that only starts like it are not named."
-        self.assertEqual(render.index_commands(self.facts("rm old.py", "mv a.py b.py", "git restore x", "git rmdir", "echo git-rm")), [])
+        before = [self.file("old.py", "added"), self.file("a.py", "added")]
+        self.assertEqual(render.index_commands(self.facts("rm old.py", "mv a.py b.py", "git restore x", "git rmdir", "echo git-rm", before=before)), [])
 
     def test_check_class_counts_it(self) -> None:
-        "just check, through check_class, counts a git mv on a page of a tutorial as a problem."
-        facts = self.facts("git mv a.py b.py")
-        facts["walk"] = {"kind": "tutorial", "loose": []}
+        "just check, through check_class, counts a git mv of a file that the walk added as a problem."
+        facts = self.facts("git mv a.py b.py", before=[self.file("a.py", "added")])
         saved = render.export, render.stale_locks, render.page_walks, render.source_gaps, render.markdown_files, render.our_words
         self.addCleanup(lambda: setattr(render, "export", saved[0]) or setattr(render, "stale_locks", saved[1])
                         or setattr(render, "page_walks", saved[2]) or setattr(render, "source_gaps", saved[3])
@@ -401,15 +442,96 @@ class IndexCommands(unittest.TestCase):
             self.assertEqual(render.check_class(Path(folder), Path(folder), "https://github.com/o/demo"), 1)
 
     def test_a_git_mv_fails_for_the_student(self) -> None:
-        "The reason: after git check, git mv of a file that the student made is refused."
+        "The reason: after git check, git mv of a file that the student made is refused; of a file of the project, changed or not, it works."
         with tempfile.TemporaryDirectory() as folder:
             work = Path(folder)
-            sh(work, "git init -q -b main && echo a > f && git add f && git commit -qm a")
+            sh(work, "git init -q -b main && echo a > f && echo b > g && echo c > h && git add f g h && git commit -qm a")
             for line in render.check_lines({"walk": {"loose": []}}):
                 sh(work, line)
-            sh(work, "echo n > new.py && git check HEAD > /dev/null")
+            sh(work, "echo n > new.py && echo more >> g && git check HEAD > /dev/null")
             self.assertNotEqual(sh(work, "git mv new.py other.py", check=False).returncode, 0)
             self.assertEqual(sh(work, "mv new.py other.py").returncode, 0)
+            self.assertEqual(sh(work, "git mv f f2 && git mv g g2").returncode, 0)
+            self.assertNotEqual(sh(work, "git rm -q g2", check=False).returncode, 0)
+            self.assertEqual(sh(work, "git rm -q h").returncode, 0)
+
+
+class AfterPatch(Case):
+    "A move whose do$ line writes a file that the author then changes more: Build it yourself gives the command for the rest."
+
+    def facts(self, path: str, base: str, patch: str) -> tuple[dict, dict]:
+        "Facts of one move: a do$ line, then patch$ PATH."
+        parts = [{"kind": "command", "text": f"printf x >> '{path}'", "makes": True, "mode": "shared", "track": "", "writes": [path]},
+                 {"kind": "patch", "mode": "shared", "path": path}]
+        found = {"path": path, "old_path": None, "status": "modified", "added": 2, "removed": 0, "binary": False, "diff": patch,
+                 "names": {"added": [], "removed": [], "changed": []}, "by": 0, "patch": patch}
+        move = {"name": "step-01.1", "number": "1.1", "title": "More", "commit": "c" * 40, "parts": parts, "files": [found]}
+        stop = {"name": "step-01", "number": "1", "title": "One", "start": base, "commit": "c" * 40, "parts": [], "files": [found], "moves": [move]}
+        return {"walk": {"kind": "tutorial", "loose": [], "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
+                "history": {}}, stop
+
+    def test_the_command_applies(self) -> None:
+        "follow reads the git apply and its here-document as one command, and it applies to the file as the student's do$ line left it."
+        import follow
+
+        path = "conf/my file.toml"
+        (self.repo / "conf").mkdir()
+        (self.repo / path).write_text('[group]\ndev = [\n    "ruff>=0.18.0",\n]\n')   # the student's uv add wrote a newer version
+        patch = '@@ -2,3 +2,7 @@\n dev = [\n     "ruff>=0.17.0",\n ]\n+\n+```\n+ PATCH\n+line-length = 100\n'
+        facts, stop = self.facts(path, "a" * 40, patch)
+        page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
+        self.assertNotIn("as its patch shows", page)
+        commands = [c for block in follow.blocks_of(page) for c in block.commands if c.startswith("git apply")]
+        self.assertEqual(len(commands), 1, page)
+        sh(self.repo, commands[0])
+        self.assertEqual((self.repo / path).read_text(), '[group]\ndev = [\n    "ruff>=0.18.0",\n]\n\n```\n PATCH\nline-length = 100\n')
+
+    def test_watch_shows_the_diff(self) -> None:
+        "Read the tutorial says a patch, and gives no command."
+        facts, stop = self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")
+        page = "\n".join(render.stop_page(facts, stop, 1, "watch", False))
+        self.assertIn("A patch to", page)
+        self.assertNotIn("git apply", page)
+
+    def test_nothing_left_is_named(self) -> None:
+        "A patch$ line whose do$ line already writes the whole file has no command, and source_gaps names it for just check."
+        facts, _ = self.facts("pyproject.toml", "a" * 40, "")
+        found = render.source_gaps(facts)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("patch$ pyproject.toml", found[0])
+        self.assertEqual(render.source_gaps(self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")[0]), [])
+
+
+class WalkSites(unittest.TestCase):
+    "The first walk's website lists the other walks, whose sites the Pages workflow puts at ID/ under it."
+
+    def test_links(self) -> None:
+        "class_pages links the first site to each other walk at ID/, and each other site back to ../."
+        def facts(ident: str, title: str, description: str) -> dict:
+            walk = {"id": ident, "title": title, "description": description, "kind": "narrative", "mode": "watch", "github": "https://github.com/o/demo"}
+            return {"walk": walk, "intro": [], "stops": [], "history": {}, "errors": [], "observed": True}
+
+        walks = {"first": facts("first", "The first", "One."), "second": facts("second", "The [second]", "Two"), "third": facts("third", "Third", "")}
+        with mock.patch.object(render, "export", lambda repo, toc, ident, *args: walks[ident]), \
+                mock.patch.object(render, "stale_locks", lambda *args: []), \
+                mock.patch.object(render, "page_walks", lambda toc: [{"id": ident} for ident in walks]):
+            pages, _, _ = render.class_pages(Path("toc.toml"), Path("."), "https://github.com/o/demo")
+        front = pages["site/index.qmd"]
+        self.assertIn("- [The \\[second\\]](second/index.html). Two.", front)
+        self.assertIn("- [Third](third/index.html).", front)
+        self.assertNotIn("](first/", front)
+        for ident in ("second", "third"):
+            self.assertIn("[The first](../)", pages[f"sites/{ident}/index.qmd"])
+            self.assertNotIn("The other walks", pages[f"sites/{ident}/index.qmd"])
+
+
+class OurWords(unittest.TestCase):
+    "timewalk's words in the prose that a reader reads."
+
+    def test_hyphenated(self) -> None:
+        "A word such as pre-commit is not commit, but a name such as step-02 is still step."
+        self.assertEqual(render.OUR_WORDS.findall("run pre-commit, then the commit-msg hook, step-by-step"), [])
+        self.assertEqual(render.OUR_WORDS.findall("see step-02, and the commit."), ["step", "commit"])
 
 
 if __name__ == "__main__":

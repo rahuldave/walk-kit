@@ -63,7 +63,9 @@ BY_HAND = ("In Build it yourself, a file that a command makes says which command
            "command in the text, or make the same change in your editor.")
 LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "Gemfile.lock",
          "composer.lock", "go.sum", "flake.lock"}
-OUR_WORDS = re.compile(r"\b(?i:steps?|commits?)\b|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")   # Start inside a sentence, bare, bold or in brackets; "Start the server" is a verb
+# step and commit, but not inside a hyphenated word such as pre-commit (step-02 still counts); Start inside a sentence,
+# bare, bold or in brackets, where "Start the server" is a verb
+OUR_WORDS = re.compile(r"(?<![\w-])(?i:steps?|commits?)(?!\w|-[A-Za-z])|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")
 CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
 STALE_LOCK = "--stale-lock"  # the option of git check at a move whose own uv.lock is out of date: it does not run uv lock --check
@@ -96,6 +98,13 @@ def span(
     ticks = "`" * (max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
     pad = " " if text.startswith("`") or text.endswith("`") else ""
     return f"{ticks}{pad}{text}{pad}{ticks}"
+
+
+def bracketed(
+    text: str,  # The text of a link
+) -> str:  # The same, with its brackets and backslashes escaped, for [text](address)
+    """Escape what would end the text of a Markdown link."""
+    return re.sub(r"([\\\[\]])", r"\\\1", text)
 
 
 def of_mode(
@@ -224,7 +233,12 @@ class Page:
                 by = found["by"] if found else "patch"
                 if self.mode == "watch":
                     self.add("", f"A patch to {link}" + (f", which renames {span(old)}." if old else "."), "")
-                elif isinstance(by, int):   # a do$ line wrote the file first: the patch is what changes after it, under What changed
+                elif isinstance(by, int) and found["patch"] and not found["binary"]:   # a do$ line wrote the file first: apply what changes after it
+                    commands = [p["text"] for p in parts if p["kind"] == "command" and p["makes"]]
+                    after = f"After {span(commands[by])}, apply" if by < len(commands) else "Apply"
+                    self.add("", f"{after} the rest of the change to {link}, from the top of the project:", "",
+                             *after_patch(path, found["status"], found["patch"]), "")
+                elif isinstance(by, int) and not found["binary"]:   # no patch to give: check_class names it
                     self.add("", f"Then change {link} as its patch shows.", "")
                 elif found and found["binary"]:   # GitHub's diff has no binary data
                     gone = f" && rm -f -- {shlex.quote(old)}" if old else ""   # the commands of a page run in the top folder
@@ -333,6 +347,31 @@ def escape(
 ) -> str:  # The same, safe inside HTML
     """Escape the characters that HTML reads."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def git_name(
+    path: str,  # A file of the project, with a/ or b/ before it
+) -> str:  # The name as a header of a patch has it: in double quotes, with C escapes, when it has a quote, a backslash or a control character
+    """Quote a path for the --- and +++ lines of a patch, as git does."""
+    if not re.search(r'["\\\x00-\x1f\x7f]', path):
+        return path
+    named = {"\a": "\\a", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", '"': '\\"', "\\": "\\\\"}
+    return '"' + "".join(named.get(c) or ("".join(f"\\{b:03o}" for b in c.encode()) if c < " " or c == "\x7f" else c) for c in path) + '"'
+
+
+def after_patch(
+    path: str,  # The file, by its path after the move
+    status: str,  # How the move changes it: added, modified, deleted or renamed
+    patch: str,  # The facts' patch of the file: the hunks that change it from what the do$ line left to the commit
+) -> list[str]:  # A fenced block of shell: git apply, with the patch in a quoted here-document
+    """Make the command that applies what changes in a file after the do$ line that writes it. The facts' patch has no
+    header, so the command gives it --- and +++ lines. -C1 lets git apply find a hunk whose context differs a little, as
+    when the student's uv add writes a newer version of a package."""
+    lines = patch.rstrip("\n").split("\n")
+    end = next(word for word in ("PATCH", *(f"PATCH_{n}" for n in range(1, len(lines) + 2))) if all(line.strip() != word for line in lines))
+    fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", patch)), default=0))
+    new = "/dev/null" if status == "deleted" else git_name(f"b/{path}")
+    return [f"{fence}bash", "\n".join([f"git apply -C1 <<'{end}'", f"--- {git_name('a/' + path)}", f"+++ {new}", *lines, end]), fence]
 
 
 def describe(
@@ -646,11 +685,18 @@ def markdown_files(
 
 def site_files(
     facts: dict,  # The facts of the walk
+    others: list[dict] = (),  # For the first walk's site: the walk of each other walk of the class (its id, title and description)
+    home: dict | None = None,  # For another walk's site: the first walk, whose site is one folder up
 ) -> dict[str, str]:  # Each file of the website, by its path in the site's folder
-    """Write the website: a front page that explains the ways of reading, and a page for each part in each way."""
+    """Write the website: a front page that explains the ways of reading, and a page for each part in each way. The
+    Pages workflow puts each other walk's site at ID/ under the first's, so the links between them are relative."""
     title = facts["walk"]["title"]
     files: dict[str, str] = {}
-    front = [f"<!-- {MADE} -->", "", *intro_lines(facts, "watch"), ""]
+    front = [f"<!-- {MADE} -->", ""]
+    if home:
+        front += [(f"This walk is one of several through the project. The website of the first, [{bracketed(home['title'])}](../), "
+                   "lists them all."), ""]
+    front += [*intro_lines(facts, "watch"), ""]
     sidebar = ["      - index.qmd"]
     if len(ways(facts)) > 1:
         front += ["There are two ways to read this tutorial. Both have the same parts, in the same order.", ""]
@@ -669,14 +715,18 @@ def site_files(
                 switch = f"**{name}.** [{WAYS[other][0]}](../{WAYS[other][1]}/{slug(stop['name'])}.qmd) is the other way to read this part.\n\n"
             body = squeeze(stop_page(facts, stop, at, mode, True))
             files[page] = f"---\ntitle: {json.dumps(label)}\n---\n\n<!-- {MADE} -->\n\n{switch}{body}"
-            text = re.sub(r"([\\\[\]])", r"\\\1", label)
-            front.append(f"- [{text}]({page})")
+            front.append(f"- [{bracketed(label)}]({page})")
             if stop["moves"]:
                 sidebar += [f"          - section: {json.dumps(label)}", f"            href: {page}", "            contents:"]
                 sidebar += [f"              - text: {json.dumps((m['number'] + ' ' + m['title']).strip())}\n"
                             f"                href: {page}#{anchor(m['name'])}" for m in stop["moves"]]
             else:
                 sidebar += [f"          - text: {json.dumps(label)}\n            href: {page}"]
+        front.append("")
+    if others:
+        front += ["## The other walks", "", "Each other walk through the project has a website of its own:", ""]
+        front += [f"- [{bracketed(other['title'])}]({quote(other['id'])}/index.html)." + (f" {ended(other['description'])}" if other.get("description", "").strip() else "")
+                  for other in others]
         front.append("")
     files["index.qmd"] = f"---\ntitle: {json.dumps(title)}\n---\n\n" + squeeze(front)
     pages = ", ".join(json.dumps(p) for p in ["index.qmd", *(f"{WAYS[m][1]}/*.qmd" for m in ways(facts))])
@@ -713,9 +763,18 @@ def source_gaps(
 ) -> list[str]:  # Why Build it yourself cannot say how each file is made
     """Check that Build it yourself can say how a student makes each file: a do$ line writes it, or the student changes it
     by hand from its patch. timewalk runs the do$ lines to see which files they write; facts made with --no-run do not
-    say, so the page shows each whole diff instead. Where a file comes from is timewalk-check's to judge."""
+    say, so the page shows each whole diff instead. A patch$ line after the do$ line that writes its file gets the
+    command that applies the rest of the change; one with nothing left to apply is named. Where a file comes from is
+    timewalk-check's to judge."""
     if facts.get("observed"):
-        return []
+        gaps = []
+        for move in (move for stop in facts["stops"] for move in stop["moves"]):
+            for part in of_mode(move["parts"], "do"):
+                found = part["kind"] == "patch" and next((f for f in move["files"] if part["path"] in (f["path"], f["old_path"])), None)
+                if found and isinstance(found["by"], int) and not found["patch"] and not found["binary"]:
+                    gaps.append(f"{move['name']}: `patch$ {part['path']}` follows the do$ line that writes the file, and the facts "
+                                "have no patch left to apply, so Build it yourself gives no command for it")
+        return gaps
     moves = [move["name"] for stop in facts["stops"] for move in stop["moves"]
              if any(p["kind"] == "command" and p["makes"] for p in move["parts"])]
     if not moves:
@@ -796,7 +855,7 @@ def class_pages(
     owner, project = github.rstrip("/").removesuffix(".git").split("/")[-2:]
     site = f"https://{owner}.github.io/{project}-walk"
     pages: dict[str, str] = {}
-    listed, gaps, words = [], 0, 0
+    listed, gaps, words, sites = [], 0, 0, []
     with tempfile.TemporaryDirectory() as scratch:
         for number, entry in enumerate(page_walks(toc)):
             ident = entry["id"]
@@ -806,16 +865,18 @@ def class_pages(
             if facts["errors"]:
                 raise PagesError(f"timewalk-check finds errors in walk {ident}. Run just check:\n  " + "\n  ".join(facts["errors"]))
             facts["stale_locks"] = stale_locks(repo, facts)
-            if facts["walk"]["kind"] == "tutorial":
+            if facts["walk"]["kind"] == "tutorial" and not facts.get("observed"):
                 gaps += len(source_gaps(facts))
             words += len(our_words(facts))
             for name, text in markdown_files(facts).items():
                 pages[f"walks/{ident}/{name}"] = text
-            folder = "site" if not number else f"sites/{ident}"
-            for name, text in site_files(facts).items():
-                pages[f"{folder}/{name}"] = text
+            sites.append(facts)
             on_github = ", ".join(f"[{WAYS[mode][0]}]({ident}/{WAYS[mode][1]}.md)" for mode in ways(facts))   # from walks/README.md
             listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
+    for number, facts in enumerate(sites):   # the first walk's site lists the others, at ID/ under it; each other links back
+        folder = "site" if not number else f"sites/{facts['walk']['id']}"
+        for name, text in site_files(facts, [f["walk"] for f in sites[1:]] if not number else [], sites[0]["walk"] if number else None).items():
+            pages[f"{folder}/{name}"] = text
     pages["walks/README.md"] = "\n".join([
         f"<!-- {MADE} -->", "", f"# The walks through {project}", "",
         ("Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
@@ -826,19 +887,118 @@ def class_pages(
 INDEX_COMMAND = re.compile(r"(?:^|[;&|(]\s*)git\s+(rm|mv)\b")  # a command that needs git's index to hold the student's work
 
 
+def git_index_uses(
+    text: str,  # A command of a page, as the student types it
+) -> list[tuple[str, list[str], list[str]]] | None:  # Each git rm and git mv in it: its verb, its options, its paths; None if it cannot be read
+    """Split a line of shell into its commands, at ; & | and brackets, and find each `git rm` and `git mv`, with the
+    options apart from the paths. A `--` ends the options."""
+    try:
+        lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    uses, command = [], []
+    for token in [*tokens, ";"]:
+        if token and set(token) <= set(";&|()"):
+            if len(command) > 1 and command[0] == "git" and command[1] in ("rm", "mv"):
+                rest = command[2:]
+                cut = rest.index("--") if "--" in rest else len(rest)
+                options = [word for word in rest[:cut] if word.startswith("-")]
+                paths = [word for word in rest[:cut] if not word.startswith("-")] + rest[cut + 1:]
+                uses.append((command[1], options, paths))
+            command = []
+        else:
+            command.append(token)
+    return uses
+
+
+def named_by(
+    arg: str,  # A path that a git command names: a file, a folder or a glob
+    paths: set[str],  # Files of the project
+) -> list[str]:  # The files of paths that it names, in order
+    """Match an argument of git rm or git mv against files: a file itself, every file under a folder, or every file that a
+    glob matches. The commands of a page run in the top folder."""
+    while arg.startswith("./"):
+        arg = arg[2:]
+    arg = arg.rstrip("/")
+    if arg in ("", ".", ":/"):
+        return sorted(paths)
+    if any(char in arg for char in "*?["):
+        return sorted(path for path in paths if fnmatch.fnmatchcase(path, arg) or fnmatch.fnmatchcase(path, arg + "/*"))
+    return sorted(path for path in paths if path == arg or path.startswith(arg + "/"))
+
+
 def index_commands(
     facts: dict,  # The facts of a tutorial
-) -> list[str]:  # A problem for each command of a move that is git rm or git mv
-    """Find each `git rm` and `git mv` that a student runs. The student never commits, so git's index does not hold the
-    student's work: `git rm` of a file that the walk changed, and `git mv` of a file that the walk made, fail."""
-    found = []
-    for stop in facts["stops"]:
-        for move in stop["moves"]:
-            for part in move["parts"]:
-                hit = INDEX_COMMAND.search(part["text"]) if part["kind"] == "command" else None
+    repo: Path | None = None,  # The project, for the files of the commits that a small walk skips; None to leave them out
+) -> list[str]:  # A problem for each git rm or git mv of a page that fails for a student
+    """Find each `git rm` and `git mv` that fails for a student. The student never commits, so git's index holds the
+    files where the walk starts. `git rm` of a file that the walk added or changed before it fails, unless with -f when
+    git tracks the file; `git mv` of a file that the walk added fails, as git does not track it. A file of the project
+    that the walk has not changed works for both. A folder or a glob fails if any file under it does."""
+    added: set[str] = set()   # the files that the walk adds, so far: git does not track the student's copy
+    changed: set[str] = set()   # the files that the walk adds or changes, so far: git's index does not hold the student's copy
+    found, before = [], None
+
+    def take(files: list[dict]) -> None:
+        for file in files:
+            if file["status"] == "renamed":
+                added.discard(file["old_path"])
+                changed.discard(file["old_path"])
+            if file["status"] == "deleted":
+                added.discard(file["path"])
+                changed.discard(file["path"])
+            else:
+                changed.add(file["path"])
+                if file["status"] in ("added", "renamed"):
+                    added.add(file["path"])
+
+    def check(name: str, parts: list[dict], files: list[dict]) -> None:
+        kept = {f["path"] for f in files if f["status"] == "deleted"} | {f["old_path"] for f in files if f["status"] == "renamed"}
+        wrote: set[str] = set()   # the files that the do$ lines before it in this move write
+        for part in parts:
+            if part["kind"] != "command":
+                continue
+            uses = git_index_uses(part["text"])
+            if uses is None:   # cannot read it: name it, as it may fail
+                hit = INDEX_COMMAND.search(part["text"])
                 if hit:
-                    found.append(f"{move['name']}: `{part['text']}` fails for a student, who never commits. Write "
-                                 f"`{hit.group(1)}` in its place, without git")
+                    found.append(f"{name}: `{part['text']}` may fail for a student, who never commits, and its quotes cannot be read. "
+                                 f"Write `{hit.group(1)}` in its place, without git")
+                continue
+            new, touched = added | (wrote - kept), changed | wrote
+            for verb, options, paths in uses:
+                force = any(o == "--force" or (o.startswith("-") and not o.startswith("--") and "f" in o[1:]) for o in options)
+                names = paths[:-1] if verb == "mv" else paths
+                bad = new if verb == "mv" or force else touched
+                hit = next(((arg, path) for arg in names for path in named_by(arg, bad)), None)
+                if not hit:
+                    continue
+                arg, path = hit
+                how = "adds" if path in new else "changes"
+                under = "" if arg.rstrip("/").removeprefix("./") == path else f", and `{arg}` names it"
+                why = "git does not track the student's copy" if path in new else "git's index does not hold the student's copy"
+                found.append(f"{name}: `{part['text']}` fails for a student, who never commits: the walk {how} `{path}` before it"
+                             f"{under}, so {why}. Write `{verb}` in its place, without git")
+                break
+            if part["makes"] and part.get("writes"):
+                wrote |= set(part["writes"])
+
+    for stop in facts["stops"]:
+        if repo and before and stop["start"] and stop["start"] != before:   # the commits that a small walk skips: the student takes their files
+            done = subprocess.run(["git", "-C", str(repo), "diff", "--name-status", "-z", "--no-renames", before, stop["start"]],
+                                  capture_output=True, check=False)
+            fields = done.stdout.decode(errors="surrogateescape").split("\0") if not done.returncode else []
+            take([{"status": {"A": "added", "D": "deleted"}.get(kind, "modified"), "path": path, "old_path": None}
+                  for kind, path in zip(fields[0::2], fields[1::2]) if path])
+        check(stop["name"], stop["parts"], stop["files"] if not stop["moves"] else [])
+        if not stop["moves"] and stop["start"]:   # a part of one commit; the first part with no start is the project as it starts
+            take(stop["files"])
+        for move in stop["moves"]:
+            check(move["name"], move["parts"], move["files"])
+            take(move["files"])
+        before = stop["commit"]
     return found
 
 
@@ -866,7 +1026,7 @@ def check_class(
                 print(f"walk {entry['id']}: {error}")
                 problems += 1
                 continue
-            found = source_gaps(facts) + index_commands(facts) if facts["walk"]["kind"] == "tutorial" else []
+            found = source_gaps(facts) + index_commands(facts, repo) if facts["walk"]["kind"] == "tutorial" else []
             for name, text in markdown_files(facts).items():
                 page = Path(scratch) / "page.md"
                 page.write_text(blank(text), encoding="utf-8")

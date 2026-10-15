@@ -421,7 +421,8 @@ patch$ hooks/pre-commit
 - **The learner can also make the change by hand.** The match marks the move done when the files match.
 
 A file that a `do$` line writes needs no `patch$` line. If the move then changes that file further, it needs a
-`patch$` line too. A command on a file that a patch brings in gets a move of its own. In timewalk-test, the move
+`patch$` line too. Build it yourself then gives a `git apply` command after the `do$` line, with the rest of the change
+in the command. A command on a file that a patch brings in gets a move of its own. In timewalk-test, the move
 `hooks-01.2` brings in `hooks/pre-commit` by `patch$ hooks/pre-commit`. The next move, `hooks-01.3`, is
 `do$ chmod +x hooks/pre-commit` alone.
 
@@ -637,7 +638,9 @@ commands from the facts file:
   student's own index does not change. It prints nothing when the files match. After each move, the page gives
   `git check` with the move's commit. The student never commits, so git's index does not hold the student's work. A `git rm` of a
   file that the walk changed fails with "local modifications", and a `git mv` of a file that the walk made fails with
-  "not under version control". Write `rm` and `mv` in the notes in their place. `just check` names each one. `git check` compares only the files, so
+  "not under version control". Write `rm` and `mv` in the notes in their place. `just check` names each `git rm` of a file that the walk added or changed
+  before it, and each `git mv` of a file that the walk added before it. A `git mv` or `git rm` of a file that the walk has not
+  changed works. `git check` compares only the files, so
   it needs nothing from git's index.
 - **Take the files of a move.** A student who is stuck runs
   `git restore --source BEFORE --staged -- :/ && git restore --source SHA --staged --worktree -- :/`. The first
@@ -730,8 +733,8 @@ give the class a `toc.toml` with one walk. See [The table of contents](#the-tabl
 | `walks/README.md` | A list of every walk, with a link to each of its pages and to its website |
 | `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
-| `site/` | The website of the first walk, for smalldocs: a front page that explains the two ways, and a page for each part in `read/` and in `build/` |
-| `sites/ID/` | The website of each other walk |
+| `site/` | The website of the first walk, for smalldocs: a front page that explains the two ways and links to the website of each other walk, and a page for each part in `read/` and in `build/` |
+| `sites/ID/` | The website of each other walk. Its front page links back to the website of the first walk |
 | `.github/workflows/pages.yml` | The workflow that builds the websites and publishes them on GitHub Pages |
 
 Do not edit a page by hand. Its first line says that `render.py` made it, and the next `just walk-update` makes it
