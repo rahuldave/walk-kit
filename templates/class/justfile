@@ -143,6 +143,12 @@ follow *args:
         python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/part-$name" --log "build/follow/part-$name.md" "$@" \
             || failed=1
     done
+    # The pages to read: nothing to run, every move and diff, every link; with --github, every link to GitHub answers
+    online=()
+    for word in "$@"; do if [ "$word" = --github ]; then online=(--github); fi; done
+    echo "follow: the pages to read"
+    python3 "$skill/scripts/read_check.py" "$out"/walks/*/read.md "$out"/site/read/*.qmd "$out"/sites/*/read/*.qmd --repo {{ quote(repo) }} \
+        --toc toc.toml --project-url "https://github.com/{{ upstream }}/{{ project }}" ${online[@]+"${online[@]}"} || failed=1
     exit "$failed"
 
 # Draft the notes of a tutorial's moves from their commits: just draft ID prints them, just draft ID --write adds them

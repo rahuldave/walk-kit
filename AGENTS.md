@@ -2,6 +2,10 @@
 
 walk-kit is a skill (`SKILL.md`) and the scripts behind it. Read `SKILL.md` and `README.md` first.
 
+- **Look for prior art before you build.** Before a new feature or fix, read the code of walk-kit and of timewalk
+  (~/Projects/timewalk/src/timewalk) that does the same job. Use it, or call it. `git check` compared `pyproject.toml`
+  with a `sed` pattern and the pages patched it as text, while timewalk's `package_names` already read it with a TOML
+  library. Say which code you read, and why it does not serve, before you write new code.
 - **No project names in the code.** Every script takes the project, the owner and the paths as arguments.
 - **One place for each fact.** `scripts/common.py` says where timewalk comes from, timewalk's `main`, unpinned.
   The private lines are in `scripts/private.py`. A template takes a value through `@key@`, and never repeats one.

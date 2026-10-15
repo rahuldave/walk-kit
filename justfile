@@ -50,7 +50,7 @@ test:
     shopt -s nullglob
     echo "test: the pages to read"
     python3 scripts/read_check.py "$scratch"/pages/walks/*/read.md "$scratch"/pages/site/read/*.qmd "$scratch"/pages/sites/*/read/*.qmd \
-        --repo "$class/repo" --toc "$class/toc.toml" | grep -v '^ok ' || failed=1
+        --repo "$class/repo" --toc "$class/toc.toml" || failed=1
     exit "$failed"
 
 # Follow every Build it yourself page and check every page to read of the walk repository on GitHub, against GitHub itself
@@ -78,7 +78,7 @@ test-github walk=test_walk:
     done
     echo "test-github: the pages to read"
     python3 scripts/read_check.py "$pages"/walks/*/read.md "$pages"/site/read/*.qmd "$pages"/sites/*/read/*.qmd \
-        --repo "$scratch/repo" --github | grep -v '^ok ' || failed=1
+        --repo "$scratch/repo" --github || failed=1
     exit "$failed"
 
 # Build the website of walk-kit from docs/ with smalldocs, and serve it at http://127.0.0.1:8001

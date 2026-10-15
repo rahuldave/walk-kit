@@ -32,6 +32,30 @@ class NoToml(TocError):
     """A Python before 3.11, which has no tomllib to read toc.toml."""
 
 
+class NoAddress(Exception):
+    """The project's address on GitHub is neither given nor in the justfile beside toc.toml."""
+
+
+def project_url(
+    folder: Path,  # The class folder or the walk repository: the folder of its toc.toml and justfile
+    given: str | None = None,  # The address given on the command line, if any
+) -> str:  # https://github.com/OWNER/NAME
+    """Name the project on GitHub: the address given, else the `upstream :=` and `project :=` lines of the justfile in
+    the folder, which class-init and walk-init write. Nothing else: never a link in a page, never a git remote."""
+    if given:
+        address = given.rstrip("/").removesuffix(".git")
+        if not re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+", address):
+            raise NoAddress(f"{given} is not https://github.com/OWNER/NAME")
+        return address
+    justfile = folder / "justfile"
+    text = justfile.read_text(encoding="utf-8") if justfile.is_file() else ""
+    found = {key: re.search(rf'^{key}\s*:=\s*"([\w.-]+)"', text, re.MULTILINE) for key in ("upstream", "project")}
+    if not all(found.values()):
+        raise NoAddress(f"{justfile} has no lines upstream := \"OWNER\" and project := \"NAME\", so the project's address on "
+                        "GitHub is not known; give it as https://github.com/OWNER/NAME")
+    return f"https://github.com/{found['upstream'].group(1)}/{found['project'].group(1)}"
+
+
 def fill(
     template: str,  # A path under templates/, for example "walk/justfile"
     values: dict[str, str],  # What replaces each @key@

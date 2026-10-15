@@ -452,5 +452,53 @@ class TimewalkTest(unittest.TestCase):
             self.assertIn(f"read_check: {len(read)} pages, 0 problems", done.stdout)
 
 
+
+class Address(unittest.TestCase):
+    "The project's address on GitHub is given or read from the class's justfile, never taken from a link in a page."
+
+    def setUp(self) -> None:
+        self.folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.folder)
+        (self.folder / "toc.toml").write_text('[[walk]]\nid = "w"\nkind = "tutorial"\nnotes = "notes.md"\n')
+        (self.folder / "walks" / "w").mkdir(parents=True)
+        self.page = self.folder / "walks" / "w" / "read.md"
+        # the first link is another repository, as wikiapp's pages open with a link to the original project
+        self.page.write_text("Made from [the original](https://github.com/someone/original).\n\n"
+                             "[A file](https://github.com/rahuldave/demo/blob/abc/f.txt)\n")
+        self.asked: list[str] = []
+        saved = render.export
+        self.addCleanup(lambda: setattr(render, "export", saved))
+        render.export = lambda repo, toc, ident, address, scratch: self.asked.append(address) or {"walk": {}, "stops": []}
+
+    def facts(self, given: str | None = None) -> list[str]:
+        "Ask the checker for the facts of the page's walk, and give the problems."
+        checker = read_check.Checker(self.folder, None, None, False, given)
+        self.addCleanup(checker.close)
+        checker.facts_for(self.page.resolve(), read_check.Text(self.page.resolve()))
+        return checker.problems
+
+    def test_from_the_justfile(self) -> None:
+        (self.folder / "justfile").write_text('project := "demo"\nupstream := "rahuldave"\n')
+        self.assertEqual(self.facts(), [])
+        self.assertEqual(self.asked, ["https://github.com/rahuldave/demo"])
+
+    def test_given(self) -> None:
+        self.assertEqual(self.facts("https://github.com/rahuldave/demo.git"), [])
+        self.assertEqual(self.asked, ["https://github.com/rahuldave/demo"])
+
+    def test_never_guessed(self) -> None:
+        problems = self.facts()
+        self.assertEqual(self.asked, [], "no export with a guessed address")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("upstream :=", problems[0])
+
+    def test_one_function_for_every_script(self) -> None:
+        "No script of walk-kit takes an address from a link in a page or from a git remote."
+        for script in (KIT / "scripts").glob("*.py"):
+            text = script.read_text()
+            self.assertNotIn("get-url", text, script.name)
+            self.assertNotIn("links_of(text) for hit in [GITHUB.match", text, script.name)
+
+
 if __name__ == "__main__":
     unittest.main()

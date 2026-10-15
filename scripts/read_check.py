@@ -46,6 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render
+from common import NoAddress, project_url
 
 SMALLDOCS = ["uvx", "--from", "smalldocs>=0.1.5", "smalldocs"]
 SHELL = {"bash", "sh", "shell", "console", ""}  # the fences whose lines a reader could run
@@ -245,9 +246,11 @@ class Checker:
         toc: Path | None,  # The class's toc.toml; None to find it above each page
         facts: Path | None,  # The facts of one walk, for every page; None to export them
         online: bool,  # Ask GitHub for every link to github.com
+        address: str | None = None,  # The project on GitHub, https://github.com/OWNER/NAME, for timewalk-export; never guessed
     ) -> None:
         """Keep the options, and start with nothing found."""
         self.repo, self.toc, self.online = repo, toc, online
+        self.address = address
         self.given = render.load(facts) if facts else None
         self.problems: list[str] = []
         self.walks: dict[tuple[str, str], dict | None] = {}  # the facts of each walk, by its toc and id
@@ -311,8 +314,12 @@ class Checker:
             if not self.repo:
                 self.problem(str(page), "the facts of the walk need the project: give --repo, or --facts")
                 return None
-            address = next((hit.group(0) for _, link in links_of(text) for hit in [GITHUB.match(link)] if hit), "https://github.com/o/p")
-            address = "/".join(address.split("/")[:5])
+            try:
+                address = project_url(toc.parent, self.address)
+            except NoAddress as error:
+                self.problem(str(page), str(error))
+                self.walks[key] = None
+                return None
             try:
                 self.walks[key] = render.export(self.repo, toc, ident, address, self.scratch)
             except render.PagesError as error:
@@ -731,7 +738,7 @@ def head(
 
 def link_cache() -> Path:  # The file of the links that answered 200, with when
     "Find the cache of the links, in the user's cache folder."
-    return render.lock_cache().parent / "links.json"
+    return render.cache_folder() / "links.json"
 
 
 def read_cache(
@@ -790,9 +797,11 @@ def main() -> int:  # The exit code: 1 if a page has a problem
     parser.add_argument("--repo", type=Path, help="the project: for the facts, and the commits that links name")
     parser.add_argument("--toc", type=Path, help="the class's toc.toml (default: toc.toml above walks/, site/ and sites/)")
     parser.add_argument("--facts", type=Path, help="the facts of one walk, for every page, in place of timewalk-export")
+    parser.add_argument("--project-url", help="the project on GitHub, https://github.com/OWNER/NAME (default: the upstream and project of the justfile beside toc.toml)")
     parser.add_argument("--github", action="store_true", help="ask GitHub for every link to github.com")
     args = parser.parse_args()
-    checker = Checker(args.repo.expanduser().resolve() if args.repo else None, args.toc.resolve() if args.toc else None, args.facts, args.github)
+    checker = Checker(args.repo.expanduser().resolve() if args.repo else None, args.toc.resolve() if args.toc else None, args.facts, args.github,
+                      args.project_url)
     try:
         for page in args.pages:
             before = len(checker.problems)
