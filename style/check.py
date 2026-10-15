@@ -39,7 +39,7 @@ CLAUSE = re.compile(r",\s+(and|but|so|which|because|while|when|where|if|or)\b|\b
 
 def blocks(text: str) -> list[tuple[int, str, str]]:  # (line, text, kind) with kind "para", "item", "cell" or "head"
     "Read the prose of a page: paragraphs, list items and headings. Code and tables are left out."
-    out, block, start, in_code, kind = [], [], 0, False, "para"
+    out, block, start, fence, kind = [], [], 0, "", "para"   # fence: the run of ` or ~ that opened the code, or ""
 
     def flush() -> None:
         nonlocal block
@@ -49,11 +49,20 @@ def blocks(text: str) -> list[tuple[int, str, str]]:  # (line, text, kind) with 
 
     for number, line in enumerate(text.split("\n"), 1):
         stripped = line.strip()
-        if stripped.startswith("```") or stripped.startswith("~~~"):
-            in_code = not in_code
+        mark = re.match(r"^(`{3,}|~{3,})", stripped)
+        if fence:
+            # As CommonMark: only the same character, at least as many times, with nothing after it, closes the code
+            if mark and mark.group(1)[0] == fence[0] and len(mark.group(1)) >= len(fence) and not stripped[len(mark.group(1)):].strip():
+                fence = ""
+            continue
+        if mark:
+            fence = mark.group(1)
             flush()
             continue
-        if in_code or not stripped or stripped.startswith("![") or stripped.startswith("<"):
+        if re.match(r"^:::+(\s*[\w{].*)?$", stripped):
+            flush()
+            continue  # a fenced div, such as ::: do or :::, is markup, as a code fence is
+        if not stripped or stripped.startswith("![") or stripped.startswith("<"):
             flush()
             continue
         if stripped.startswith("#"):

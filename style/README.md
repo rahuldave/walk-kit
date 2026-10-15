@@ -4,7 +4,7 @@ Everything that the walk skill writes follows `GUIDE.md`, the nossaifd writing g
 in `GUIDE.md`. Other files of walk-kit point to it, and do not repeat them.
 
 `GUIDE.md` and `check.py` are copies from the nossaifd repository, https://github.com/rahuldave/nossaifd, at its
-commit 13db27d.
+commit ca13f76.
 Its site is https://rahuldave.com/nossaifd/. If the guide changes there, copy both files again. Both files
 are under the MIT licence, in `LICENSE` in this folder.
 

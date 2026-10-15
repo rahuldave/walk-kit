@@ -24,6 +24,8 @@ test:
     test -f "$source/history/build.py" || { echo "test: $source is not timewalk-test; set TIMEWALK_TEST" >&2; exit 1; }
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
+    # walk-kit's copy of the writing guide's checker must be nossaifd's, when a clone of nossaifd is here
+    if [ -d ../nossaifd ]; then python3 scripts/style_sync.py; fi
     python3 -m unittest discover -s tests
     # timewalk-test as last committed, with its project built there: an edit in progress or a just build in timewalk-test
     # during the run cannot change the pages under the checks
