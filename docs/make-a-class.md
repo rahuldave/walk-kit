@@ -66,7 +66,8 @@ select = [{ range = "step-02.2..step-02.3", title = "An empty text, and case" },
 
 In do mode, timewalk compares the learner's files with the files of each move. A learner who runs `uv add` on a
 later day gets newer versions, so `pyproject.toml` and `uv.lock` never match. So a tutorial with such a move sets
-`loose`, and timewalk compares those files by the names of their packages, and not by their versions.
+`loose`, and timewalk compares those files by the names of their packages, and not by their versions. The `git check`
+of the student pages compares them by the same rules.
 
 A small walk can also have notes of its own, with lines such as `{{include step-02.1}}` that take move sections from
 the big tutorial. [Several walks](https://rahuldave.com/timewalk/walks.html) in timewalk's documentation lists every
@@ -81,6 +82,11 @@ hand.
 A move section opens with the problem, gives the change piece by piece, and ends with a command that checks
 it. The notes never copy the code of a file. A line `do$ COMMAND` gives the command that writes a file, and a line
 `patch$ PATH` says that the move changes `PATH` by its patch.
+
+Change dependencies and `uv.lock` only through uv commands, such as `do$ uv add ruff` or `do$ uv lock`. `just check`
+names a `patch$` line that changes the dependencies of a `pyproject.toml`, and every `patch$` line of a `uv.lock`. Other
+tables of a `pyproject.toml`, such as `[tool.ruff]`, take a `patch$` line. The student pages set them with a
+command, and keep the rest of the student's file.
 
 A student who builds the project never commits. So write `rm` and `mv` on a `do$` line, not `git rm` and `git mv`. A
 `git rm` of a file that the walk changed fails, and so does a `git mv` of a file that the walk made. `just check` names

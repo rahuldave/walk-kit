@@ -331,6 +331,9 @@ file that `loose` names is not compared by its contents, but it must be there wh
 `just check` warns of an entry that no move changes. See
 https://rahuldave.com/timewalk/walks.html#files-that-match-by-the-names-of-their-packages.
 
+Change dependencies and `uv.lock` only through uv commands, on `do$` lines. A `patch$` line of a `pyproject.toml` can
+set other tables, such as `[tool.ruff]`. See [pyproject.toml and uv.lock change through uv](#pyprojecttoml-and-uvlock-change-through-uv).
+
 ### Write for a reader who has never heard of timewalk
 
 A learner reads the notes in timewalk, or on the pages that `just walk-update` makes for the walk repository. See
@@ -649,21 +652,49 @@ commands from the facts file:
 
 ### git check and loose
 
-timewalk compares the files that a walk's `loose` names by the names of their packages, so that a student who
-runs `uv add` a month later still matches. `git check` aims for the same:
+timewalk compares the files that a walk's `loose` names by the names of their packages. So a student who runs
+`uv add` a month later still matches. `git check` does the same, with the same rules:
 
-- A `pyproject.toml` goes through a git text conversion, `diff.names.textconv`, that cuts the version off each
-  requirement before git compares it.
-- A `uv.lock` is left out of the comparison, because a newer package can bring new packages with it. `git check`
-  shows a `uv.lock` that only one side has, and runs `uv lock --check` on the student's own.
-- A move can change `pyproject.toml` and leave `uv lock` to the next move. At that move, the project's own `uv.lock`
-  fails `uv lock --check`. The renderer finds such moves: it runs `uv lock --check` on the files of each commit in a
-  scratch folder, offline first, and keeps the result in `~/.cache/walk-kit/locks`. At such a move, the page gives
-  `git check SHA --stale-lock`, which leaves out `uv lock --check`.
+- A `pyproject.toml` and a `uv.lock` are compared as data, by the names of their packages. **Get the project** writes
+  a small Python program, `package_names.py`, into the student's `.git` folder. The program is a copy of timewalk's
+  `package_names`. It reads the file with Python's TOML reader. In a `pyproject.toml`, it cuts each requirement to
+  its name, its extras, its address and its marker, and keeps every other value. In a `uv.lock`, it keeps the
+  packages that the project's own packages ask for, by name, and the members of the workspace. It prints the result
+  as JSON, one item a line. git runs the program through uv, as the text conversion of each such file, and compares
+  what it prints. The program needs Python 3.11 or later. If the student has none, uv fetches one, once, so the first
+  check needs the network. Both uv commands run with `--no-config`, so a uv setting of the student's project, such
+  as an index of its own, cannot stop them.
+- A student who set up `git check` from an older page runs Get the project again. The new lines replace the old.
+- For example, the student runs `uv add --dev ruff` a month after the project did, and gets `"ruff>=0.17.1"` where the
+  project has `"ruff>=0.17.0"`. ruff 0.17.1 needs a new package, and `uv.lock` names it. Both files still match, because the
+  names in `pyproject.toml` are the same, and the project's own package in `uv.lock` asks for the same names.
 - Any other file that `loose` names has to be there when the commit has it, and not there when the commit does not.
 
 With `loose`, `git check` prints the lines that differ, not a list of files, because the text conversion works
 on lines.
+
+### pyproject.toml and uv.lock change through uv
+
+A student's `uv add` writes the versions of the day. A text patch of `pyproject.toml` from the project has the
+project's versions in its context, so it fails beside the student's. So the pages change these two files as data:
+
+- **Dependencies and `uv.lock` change only through uv commands, on `do$` lines.** `just check` names a `patch$` line
+  of a `pyproject.toml` that changes `project.dependencies`, `project.optional-dependencies`, `dependency-groups`, or
+  `dev-dependencies`, `sources` or `workspace` in `tool.uv`. `uv add` and `uv remove` write these values. The problem
+  says "change dependencies with uv add or uv remove on a do$ line". `just check` also names every `patch$` line of a
+  `uv.lock`, with the problem "uv.lock is written by uv; give the uv command on a do$ line".
+- **The page sets the other values of a `pyproject.toml`.** For a `patch$` line of a `pyproject.toml` that `loose`
+  names, Build it yourself gives one command in place of the patch. The renderer compares the file before the move
+  and after it as data. It finds each value that the move sets or removes, such as the table `[tool.ruff]`. The
+  command runs a Python program through uv, with tomlkit, a TOML library that keeps comments and order. The
+  program reads the student's file, sets each of these values, removes the others, and writes the file back. The
+  values are in the command, so it fetches no file of the project. uv fetches tomlkit once, and keeps it in its cache.
+  A table goes into the table that is there, key by key, so the
+  versions that the student's `uv add` wrote stay.
+- After a `do$` line that writes the `pyproject.toml`, the command sets only what the `do$` line did not write. The
+  renderer takes the facts' patch back from the commit's file to find what the `do$` line wrote.
+- The renderer reads the files from the project, so the pages of such a walk need `--repo`.
+- Read the tutorial still shows the diff.
 
 ### A gap, a page of its own, and a binary file
 

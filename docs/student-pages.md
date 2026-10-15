@@ -39,16 +39,17 @@ move. It runs `git add -A` in a copy of git's index, so a new file counts too. T
 change. It prints nothing when the student's files match.
 
 A student who runs `uv add` a month later gets newer packages, and the files no longer match. So a walk can name
-such files in its `loose` list in `toc.toml`, and `git check` then compares them less strictly:
+such files in its `loose` list in `toc.toml`, and `git check` then compares them as timewalk does:
 
-- `pyproject.toml` is compared by the names of its packages. A git text conversion cuts the version off each
-  requirement first.
-- `uv.lock` is left out of the comparison. `git check` shows a `uv.lock` that only one side has, and runs
-  `uv lock --check` on the student's own.
-- At a move where the project's own `uv.lock` fails `uv lock --check`, the page gives `git check SHA --stale-lock`.
-  For example, one move adds a package to `pyproject.toml`, and the next runs `uv lock`. With `--stale-lock`,
-  `git check` does not run `uv lock --check`, so a student whose files are the project's passes.
+- `pyproject.toml` and `uv.lock` are compared by the names of their packages, and not by their versions. **Get the
+  project** writes a small Python program, `package_names.py`, into the folder `.git`. It is a copy of timewalk's own
+  rules. git runs it through uv on each of these files, and compares what it prints.
+- For example, the student's `uv add --dev ruff` writes `"ruff>=0.17.1"`, and the project has `"ruff>=0.17.0"`.
+  `git check` prints nothing, because both files name the same packages.
 - Any other file that `loose` names has to be there when the commit has it.
+
+Dependencies and `uv.lock` change only through uv commands, on `do$` lines. `just check` names a `patch$` line that
+changes the dependencies of a `pyproject.toml`, and every `patch$` line of a `uv.lock`.
 
 ## When a student is stuck
 
@@ -63,7 +64,11 @@ the files where the part starts into the student's clone. A file that the projec
 and the page says to delete it if `git check` lists it.
 
 In the notes, a line `patch$ PATH` says that a move changes `PATH` by a patch. In Build it yourself, the line
-becomes a command that applies the patch from GitHub, with `curl` and `git apply`. A binary file
+becomes a command that applies the patch from GitHub, with `curl` and `git apply`.
+
+A `pyproject.toml` that `loose` names is the exception. Its line becomes a command that sets each value that the move sets, such as the table
+`[tool.ruff]`, with tomlkit, a TOML library. The command keeps the rest of the student's file, and the versions that
+the student's `uv add` wrote. A binary file
 has no patch on GitHub, so its line becomes a `git restore` of the file from the commit. A line that names a renamed file
 by its old path gets the command for the new path, which renames the file.
 

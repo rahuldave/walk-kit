@@ -1,12 +1,10 @@
-"""Tests of render.py's commands for Build it yourself: git check, the lock of a move, and the patch of a renamed file.
+"""Tests of render.py's commands for Build it yourself: git check, a pyproject.toml set as data, and the patch of a renamed file.
 
     python3 -m unittest discover -s tests
 
-Each test makes a small git repository in a temporary folder. The lock tests need uv, and run offline.
+Each test makes a small git repository in a temporary folder. The tests of pyproject.toml and uv.lock need uv.
 """
 
-import contextlib
-import io
 import os
 import re
 import shutil
@@ -14,7 +12,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -67,15 +64,12 @@ def facts_of(
 
 
 class Case(unittest.TestCase):
-    "A temporary folder, and a cache of the lock checks of its own."
+    "A temporary folder, with a repository of the project in it."
 
     def setUp(self) -> None:
-        "Make the folder, and send the cache of the lock checks there."
+        "Make the folder and the repository."
         self.folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.folder)
-        self.cache = os.environ.get("XDG_CACHE_HOME")
-        os.environ["XDG_CACHE_HOME"] = str(self.folder / "cache")
-        self.addCleanup(lambda: os.environ.pop("XDG_CACHE_HOME") if self.cache is None else os.environ.update(XDG_CACHE_HOME=self.cache))
         self.repo = self.folder / "repo"
         self.repo.mkdir()
         sh(self.repo, "git init -q -b main")
@@ -145,171 +139,10 @@ class GitCheck(Case):
         (work / "pyproject.toml").write_text(PYPROJECT.replace("[]", '[\n    "six>=1.16",\n]'))
         (work / "uv.lock").unlink()
         found = sh(work, f"git check {start}", check=False)
-        self.assertIn("D\tuv.lock", found.stdout)
+        self.assertIn("deleted file mode", found.stdout)
+        self.assertIn("uv.lock", found.stdout)
         self.assertNotIn("six", found.stdout)
         self.assertEqual(sh(work, "git diff --cached --name-only").stdout, "")
-
-
-class StaleLock(Case):
-    "A move whose own uv.lock is out of date gets git check --stale-lock, and a learner with its files passes."
-
-    def setUp(self) -> None:
-        "A project whose second commit changes pyproject.toml and not uv.lock, and whose third runs uv lock."
-        super().setUp()
-        if not shutil.which("uv"):
-            self.skipTest("uv is not installed")
-        (self.repo / "pyproject.toml").write_text(PYPROJECT)
-        sh(self.repo, "uv lock -q --offline")
-        self.start = commit(self.repo, {}, "start")
-        self.stale = commit(self.repo, {"pyproject.toml": PYPROJECT.replace("0.1.0", "0.2.0")}, "a new version")
-        sh(self.repo, "uv lock -q --offline")
-        self.locked = commit(self.repo, {}, "uv lock")
-        self.facts = facts_of(["pyproject.toml", "uv.lock"], [self.stale, self.locked])
-
-    def test_found(self) -> None:
-        "The second commit alone is stale, and the result is kept in the cache."
-        self.assertEqual(render.stale_locks(self.repo, self.facts), [self.stale])
-        version = subprocess.run(["uv", "--version"], capture_output=True, text=True, check=True).stdout.strip()
-        self.assertEqual((render.lock_cache() / render.lock_key(self.repo, self.stale, version)).read_text(), "stale\n")
-        self.assertEqual((render.lock_cache() / render.lock_key(self.repo, self.locked, version)).read_text(), "current\n")
-        self.assertEqual(sh(self.repo, "git status --porcelain").stdout, "")
-
-    def test_without_loose(self) -> None:
-        "A walk whose loose does not name uv.lock compares uv.lock line by line, and runs no uv lock --check."
-        self.assertEqual(render.stale_locks(self.repo, facts_of([], [self.stale, self.locked])), [])
-
-    def test_learner_passes(self) -> None:
-        "The page gives --stale-lock at the stale move, and a learner whose files are the commit's passes there."
-        self.facts["stale_locks"] = render.stale_locks(self.repo, self.facts)
-        page = render.Page(self.facts, "do", False)
-        page.check(self.stale, self.start, "move")
-        page.check(self.locked, self.stale, "move")
-        lines = [line for line in page.lines if line.startswith("git check")]
-        self.assertEqual(lines, [f"git check {self.stale[:12]} {render.STALE_LOCK}", f"git check {self.locked[:12]}"])
-        work = self.learner(self.facts, self.start)
-        sh(work, f"git restore --source {self.stale} --worktree -- :/")
-        self.assertNotEqual(sh(work, f"git check {self.stale}", check=False).returncode, 0)
-        done = sh(work, lines[0], check=False)
-        self.assertEqual((done.returncode, done.stdout + done.stderr), (0, ""))
-        sh(work, f"git restore --source {self.locked} --worktree -- :/")
-        done = sh(work, lines[1], check=False)
-        self.assertEqual((done.returncode, done.stdout + done.stderr), (0, ""))
-
-
-class LockCheck(Case):
-    "uv lock --check sees only the project's own files and settings, keeps its answer by those files, and says when it cannot tell."
-
-    def setUp(self) -> None:
-        "A project with a current uv.lock at its one commit."
-        super().setUp()
-        if not shutil.which("uv"):
-            self.skipTest("uv is not installed")
-        (self.repo / "pyproject.toml").write_text(PYPROJECT)
-        sh(self.repo, "uv lock -q --offline")
-        self.sha = commit(self.repo, {}, "start")
-
-    def stale(
-        self,
-        sha: str = "",  # The commit (default: the one commit)
-    ) -> list[str]:  # What stale_locks finds
-        "Find the stale commits of a walk with the one move."
-        return render.stale_locks(self.repo, facts_of(["pyproject.toml", "uv.lock"], [sha or self.sha]))
-
-    def uv_runs(self) -> list[list[str]]:  # Each uv lock command that render runs from now on
-        "Count the runs of uv lock, and still run them."
-        runs, real = [], subprocess.run
-
-        def run(args, *rest, **options):
-            if args[:2] == ["uv", "lock"]:
-                runs.append(args)
-            return real(args, *rest, **options)
-        patcher = mock.patch.object(render.subprocess, "run", run)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        return runs
-
-    def test_author_settings_ignored(self) -> None:
-        "A UV_ variable and a uv.toml of the author's own, which would make uv lock --check fail, do not make the lock stale."
-        config = self.folder / "config" / "uv"
-        config.mkdir(parents=True)
-        (config / "uv.toml").write_text('resolution = "lowest-direct"\n')
-        environ = {"UV_EXCLUDE_NEWER": "2020-01-01T00:00:00Z", "UV_DEFAULT_INDEX": "https://mirrors.example.invalid/simple/",
-                   "XDG_CONFIG_HOME": str(self.folder / "config")}
-        self.assertNotEqual(sh(self.repo, "UV_EXCLUDE_NEWER=2020-01-01T00:00:00Z uv lock --check -q --offline", check=False).returncode, 0)
-        with mock.patch.dict(os.environ, environ):
-            self.assertEqual(self.stale(), [])
-
-    def test_project_settings_kept(self) -> None:
-        "The project's own [tool.uv], an index of its own and exclude-newer, still decides: such a lock is current."
-        wheels = self.folder / "wheels"
-        wheels.mkdir()
-        with zipfile.ZipFile(wheels / "tiny-1.0-py3-none-any.whl", "w") as wheel:
-            wheel.writestr("tiny/__init__.py", "")
-            wheel.writestr("tiny-1.0.dist-info/METADATA", "Metadata-Version: 2.1\nName: tiny\nVersion: 1.0\n")
-            wheel.writestr("tiny-1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
-            wheel.writestr("tiny-1.0.dist-info/RECORD", "")
-        own = (PYPROJECT.replace("[]", '["tiny"]') + '\n[tool.uv]\nexclude-newer = "2024-01-01T00:00:00Z"\n\n'
-               f'[[tool.uv.index]]\nname = "local"\nurl = "{wheels}"\nformat = "flat"\n')
-        (self.repo / "pyproject.toml").write_text(own)
-        sh(self.repo, "uv lock -q --offline")
-        sha = commit(self.repo, {}, "own settings")
-        self.assertEqual(sh(self.repo, "uv lock --check -q --offline --no-config", check=False).returncode != 0, True,
-                         "--no-config would leave out the project's own exclude-newer")
-        self.assertEqual(self.stale(sha), [])
-
-    def test_cache_by_files(self) -> None:
-        "A retag, with new commits but the same pyproject.toml and uv.lock, runs no uv lock again; another uv version is another key."
-        self.assertEqual(self.stale(), [])
-        runs = self.uv_runs()
-        sh(self.repo, "git commit -q --amend -m 'start, again'")
-        again = commit(self.repo, {"README.md": "new\n"}, "a fix to an earlier step")
-        self.assertEqual(self.stale(again), [])
-        self.assertEqual(runs, [])
-        self.assertNotEqual(render.lock_key(self.repo, again, "uv 1.0"), render.lock_key(self.repo, again, "uv 2.0"))
-        member = commit(self.repo, {"member/pyproject.toml": PYPROJECT.replace("demo", "member")}, "a member")
-        self.assertNotEqual(render.lock_key(self.repo, again, "uv 1.0"), render.lock_key(self.repo, member, "uv 1.0"))
-
-    def test_undecided_is_an_error(self) -> None:
-        "A commit that uv cannot decide is an error that names the commit, and nothing is kept in the cache."
-        bad = commit(self.repo, {"pyproject.toml": "[project\n"}, "broken")
-        with self.assertRaises(render.PagesError) as caught:
-            self.stale(bad)
-        self.assertIn(bad[:12], str(caught.exception))
-        self.assertIn("install uv", str(caught.exception))
-        self.assertFalse(any(render.lock_cache().glob("*")) if render.lock_cache().is_dir() else False)
-
-    def test_no_uv_is_an_error(self) -> None:
-        "Without uv, a walk whose loose names uv.lock cannot be rendered with --repo."
-        with mock.patch.object(render.shutil, "which", return_value=None), self.assertRaises(render.PagesError):
-            self.stale()
-
-    def test_links(self) -> None:
-        "A project with an absolute symlink and one that leaves the project is checked, and no link is followed."
-        sh(self.repo, "ln -s /etc/hosts hosts-link && ln -s ../../x esc")
-        sha = commit(self.repo, {}, "links")
-        self.assertEqual(self.stale(sha), [])
-
-    def test_workspace(self) -> None:
-        "A workspace with a member, whose README the build backend names, is checked with every file it needs."
-        root = PYPROJECT.replace("[]", '["member"]') + '\n[tool.uv.sources]\nmember = { workspace = true }\n\n[tool.uv.workspace]\nmembers = ["packages/*"]\n'
-        member = (PYPROJECT.replace("demo", "member") + 'readme = "README.md"\n\n[build-system]\nrequires = ["uv_build"]\n'
-                  'build-backend = "uv_build"\n')
-        commit(self.repo, {"pyproject.toml": root, "packages/member/pyproject.toml": member, "packages/member/README.md": "hi\n",
-                           "packages/member/src/member/__init__.py": ""}, "workspace")
-        sh(self.repo, "uv lock -q --offline")
-        sha = commit(self.repo, {}, "lock")
-        self.assertEqual(self.stale(sha), [])
-
-    def test_check_class_error(self) -> None:
-        "check_class reports a commit that the project lacks as a problem of the walk, not a traceback."
-        facts = facts_of(["pyproject.toml", "uv.lock"], ["0" * 40])
-        facts["errors"] = []
-        out = io.StringIO()
-        with mock.patch.object(render, "page_walks", return_value=[{"id": "w"}]), mock.patch.object(render, "export", return_value=facts), \
-                contextlib.redirect_stdout(out):
-            self.assertEqual(render.check_class(self.folder, self.repo, "https://github.com/o/demo"), 1)
-        self.assertIn("walk w: ", out.getvalue())
-        self.assertIn("does not have commit", out.getvalue())
 
 
 class Rename(Case):
@@ -458,12 +291,12 @@ class IndexCommands(unittest.TestCase):
     def test_check_class_counts_it(self) -> None:
         "just check, through check_class, counts a git mv of a file that the walk added as a problem."
         facts = self.facts("git mv a.py b.py", before=[self.file("a.py", "added")])
-        saved = render.export, render.stale_locks, render.page_walks, render.source_gaps, render.markdown_files, render.our_words
-        self.addCleanup(lambda: setattr(render, "export", saved[0]) or setattr(render, "stale_locks", saved[1])
+        saved = render.export, render.toml_edits, render.page_walks, render.source_gaps, render.markdown_files, render.our_words
+        self.addCleanup(lambda: setattr(render, "export", saved[0]) or setattr(render, "toml_edits", saved[1])
                         or setattr(render, "page_walks", saved[2]) or setattr(render, "source_gaps", saved[3])
                         or setattr(render, "markdown_files", saved[4]) or setattr(render, "our_words", saved[5]))
         render.export = lambda *args: facts
-        render.stale_locks = lambda *args: []
+        render.toml_edits = lambda *args: {}
         render.page_walks = lambda toc: [{"id": "w"}]
         render.source_gaps = render.our_words = lambda facts: []
         render.markdown_files = lambda facts: {}
@@ -542,7 +375,7 @@ class WalkSites(unittest.TestCase):
 
         walks = {"first": facts("first", "The first", "One."), "second": facts("second", "The [second]", "Two"), "third": facts("third", "Third", "")}
         with mock.patch.object(render, "export", lambda repo, toc, ident, *args: walks[ident]), \
-                mock.patch.object(render, "stale_locks", lambda *args: []), \
+                mock.patch.object(render, "toml_edits", lambda *args: {}), \
                 mock.patch.object(render, "page_walks", lambda toc: [{"id": ident} for ident in walks]):
             pages, _, _ = render.class_pages(Path("toc.toml"), Path("."), "https://github.com/o/demo")
         front = pages["site/index.qmd"]
@@ -568,6 +401,7 @@ class OurWords(unittest.TestCase):
         found = render.our_words(facts)
         self.assertEqual(len(found), 1, found)
         self.assertIn("the walk's description", found[0])
+
 
 
 if __name__ == "__main__":
