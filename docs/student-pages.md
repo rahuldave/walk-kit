@@ -35,7 +35,8 @@ git switch -c mine 6a63758166d3
 ```
 
 The same section adds a git alias, `git check`. After each move, the page gives `git check` with the commit of the
-move. It runs `git add -A`, so a new file counts too, and prints nothing when the student's files match.
+move. It runs `git add -A` in a copy of git's index, so a new file counts too. The student's own index does not
+change. It prints nothing when the student's files match.
 
 A student who runs `uv add` a month later gets newer packages, and the files no longer match. So a walk can name
 such files in its `loose` list in `toc.toml`, and `git check` then compares them less strictly:
@@ -44,6 +45,9 @@ such files in its `loose` list in `toc.toml`, and `git check` then compares them
   requirement first.
 - `uv.lock` is left out of the comparison. `git check` shows a `uv.lock` that only one side has, and runs
   `uv lock --check` on the student's own.
+- At a move where the project's own `uv.lock` fails `uv lock --check`, the page gives `git check SHA --stale-lock`.
+  For example, one move adds a package to `pyproject.toml`, and the next runs `uv lock`. With `--stale-lock`,
+  `git check` does not run `uv lock --check`, so a student whose files are the project's passes.
 - Any other file that `loose` names has to be there when the commit has it.
 
 ## When a student is stuck
@@ -60,7 +64,8 @@ and the page says to delete it if `git check` lists it.
 
 In the notes, a line `patch$ PATH` says that a move changes `PATH` by a patch. In Build it yourself, the line
 becomes a command that applies the patch from GitHub, with `curl` and `git apply`. A binary file
-has no patch on GitHub, so its line becomes a `git restore` of the file from the commit.
+has no patch on GitHub, so its line becomes a `git restore` of the file from the commit. A line that names a renamed file
+by its old path gets the command for the new path, which renames the file.
 
 ## Where the pages go
 
@@ -74,7 +79,8 @@ has no patch on GitHub, so its line becomes a `git restore` of the file from the
 | `.github/workflows/pages.yml` | The workflow that builds the websites with smalldocs, and publishes them on GitHub Pages |
 
 GitHub Pages publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
-`https://OWNER.github.io/bla-walk/ID/`. Do not edit a page by hand, because the next `just walk-update` makes it
+`https://OWNER.github.io/bla-walk/ID/`. An owner with a custom domain gets that domain in place of `OWNER.github.io`.
+Do not edit a page by hand, because the next `just walk-update` makes it
 again. Edit the notes in the class folder.
 
 The pages need `toc.toml`. A class with only `notes.md` gets no pages. To get them, give the class a `toc.toml` with

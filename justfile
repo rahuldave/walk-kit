@@ -3,16 +3,16 @@
 # The project of timewalk-test, whose walks the test follows
 test_class := env("TIMEWALK_TEST", home_directory() / "Projects/timewalk-test")
 # The address on GitHub that timewalk-test's pages link to
-test_github := "https://github.com/o/tally"
+test_github := "https://github.com/rahuldave/tally"
 
 [private]
 default:
     @just --list --unsorted
 
-# Check README.md and templates/walk/README.md against the writing guide: their form, then a review by a model
-style:
+# Check README.md and templates/walk/README.md against the writing guide: their form, then a review by a model. --all reviews them whole
+style *args:
     python3 style/check.py README.md templates/walk/README.md
-    python3 scripts/review.py --class . README.md templates/walk/README.md
+    python3 scripts/review.py --class . {{ args }} README.md templates/walk/README.md
 
 # Render the pages of timewalk-test's walks, and follow each Build it yourself page: every git check must pass
 test:
@@ -22,12 +22,20 @@ test:
     test -d "$class/repo/.git" || { echo "test: $class/repo is missing; run just build in $class" >&2; exit 1; }
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
+    python3 -m unittest discover -s tests
     python3 scripts/render.py --class "$class" --repo "$class/repo" --github {{ quote(test_github) }} --pages "$scratch/pages" > /dev/null
     failed=0
     for page in "$scratch"/pages/walks/*/build.md; do
         id=$(basename "$(dirname "$page")")
         echo "test: walk $id"
         python3 scripts/follow.py "$page" --repo "$class/repo" --work "$scratch/work/$id" || failed=1
+    done
+    # Each part page of each walk's website, as a student who starts at that part
+    for page in "$scratch"/pages/site/build/*.qmd "$scratch"/pages/sites/*/build/*.qmd; do
+        [ -f "$page" ] || continue
+        name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
+        echo "test: part page $name"
+        python3 scripts/follow.py "$page" --repo "$class/repo" --work "$scratch/work/part-$name" > /dev/null || { echo "test: FAIL $name"; failed=1; }
     done
     exit "$failed"
 

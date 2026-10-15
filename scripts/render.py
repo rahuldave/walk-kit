@@ -1,6 +1,6 @@
 """Render the pages that students read from the facts of a walk, which `timewalk-export --json` writes.
 
-    python3 render.py FACTS.json --markdown walks/ID --site site      write the pages of one walk
+    python3 render.py FACTS.json --markdown walks/ID --site site [--repo ../bla]     write the pages of one walk
     python3 render.py FACTS.json --check                              check the walk's text, and write nothing
     python3 render.py --class . --repo ../bla --github URL            check every walk of a class, for just check
     python3 render.py --class . --repo ../bla --github URL --pages DIR    write the pages of every walk of a class, for just pages
@@ -23,6 +23,11 @@ smalldocs: `index.qmd`, which explains the two ways, a page for each part in `re
 `styles.css`. Every file it writes says so in its first line, and it writes over only such files, and removes its own
 pages that the walk no longer has. The same facts give the same bytes.
 
+With the project, from `--repo`, a tutorial whose `loose` names uv.lock finds the moves where the project's own uv.lock
+does not match its pyproject.toml: it runs `uv lock --check` on each commit in a scratch folder, without the author's own uv
+settings, and keeps the result in ~/.cache/walk-kit/locks, by the uv version and the files that uv reads. A commit that uv
+cannot decide is an error. At such a move the page gives `git check SHA --stale-lock`, which does not run `uv lock --check`.
+
 `--pages DIR` writes the pages of every walk of a class into DIR as walk-update lays them out in the walk repository:
 `walks/ID/` for the Markdown, `site/` for the first walk's website and `sites/ID/` for the others, and `walks/README.md`.
 
@@ -35,8 +40,10 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -59,6 +66,7 @@ LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lo
 OUR_WORDS = re.compile(r"\b(?i:steps?|commits?)\b|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")   # Start inside a sentence, bare, bold or in brackets; "Start the server" is a verb
 CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
+STALE_LOCK = "--stale-lock"  # the option of git check at a move whose own uv.lock is out of date: it does not run uv lock --check
 SITE_TAKEN = {"read", "build", "site_libs"}  # folders of the first walk's built site: no other walk's site may have these ids
 PAGE_GLOBS = ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*.css",
               "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, for a later run to remove
@@ -171,6 +179,7 @@ class Page:
         What changed. In Build it yourself, a patch$ line also gives the command that applies the patch from GitHub."""
         known = {f["path"] for f in files}
         run: list[dict] = []   # commands one after another, written as one block
+        given: set[str] = set()   # the files whose patch is given: a rename has two patch$ lines, its old path and its new, and one patch
 
         def flush() -> None:
             if not run:
@@ -204,20 +213,29 @@ class Page:
                                      part["text"])
                 self.add("", text, "")
             elif part["kind"] == "patch":
-                path = part["path"]
+                found = (next((f for f in files if f["path"] == part["path"]), None)
+                         or next((f for f in files if f["status"] == "renamed" and f["old_path"] == part["path"]), None))
+                path = found["path"] if found else part["path"]   # a renamed file by its new path, which git apply matches
+                old = found["old_path"] if found and found["status"] == "renamed" else None
+                if path in given:
+                    continue
+                given.add(path)
                 link = f"[{span(path)}](#{anchor(move, path)})" if path in known else span(path)
-                by = next((f["by"] for f in files if f["path"] == path), "patch")
+                by = found["by"] if found else "patch"
                 if self.mode == "watch":
-                    self.add("", f"A patch to {link}.", "")
+                    self.add("", f"A patch to {link}" + (f", which renames {span(old)}." if old else "."), "")
                 elif isinstance(by, int):   # a do$ line wrote the file first: the patch is what changes after it, under What changed
                     self.add("", f"Then change {link} as its patch shows.", "")
-                elif any(f["path"] == path and f["binary"] for f in files):   # GitHub's diff has no binary data
+                elif found and found["binary"]:   # GitHub's diff has no binary data
+                    gone = f" && rm -f -- {shlex.quote(old)}" if old else ""   # the commands of a page run in the top folder
                     self.add("", f"{link} is a binary file, with no patch to apply. Take it from the project:", "", "```bash",
-                             f"git restore --source {sha[:12]} --worktree -- {shlex.quote(':(top,literal)' + path)}", "```", "")
+                             f"git restore --source {sha[:12]} --worktree -- {shlex.quote(':(top,literal)' + path)}{gone}", "```", "")
                 else:   # the whole change from GitHub, of which git apply takes this file alone, from the top of the project
                     diff = f"{self.url}/compare/{base}...{sha}.diff" if base else f"{self.url}/commit/{sha}.diff"
-                    pattern = re.sub(r"([*?\[\\])", r"\\\1", path)   # git apply reads --include as a pattern
-                    self.add("", f"Apply the patch to {link}, from the top of the project:", "", "```bash",
+                    # git apply reads --include as a pattern, and matches it against a file's new path: a rename's old path matches nothing
+                    pattern = re.sub(r"([*?\[\\])", r"\\\1", path)
+                    what = f"the patch that renames {span(old)} to {link}" if old else f"the patch to {link}"
+                    self.add("", f"Apply {what}, from the top of the project:", "", "```bash",
                              f"curl -fsSL {diff} | git apply --include={shlex.quote(pattern)}", "```", "")
         flush()
 
@@ -231,8 +249,12 @@ class Page:
         commit's files as they are. Both run anywhere in the learner's clone of the project."""
         if self.mode != "do":
             return
+        stale = sha in self.facts.get("stale_locks", ())
+        if stale:   # a learner whose files are the project's has its out-of-date uv.lock too, and uv lock --check would fail
+            self.add("", f"At this {what}, the project's own `uv.lock` does not match its `pyproject.toml`. So the command has "
+                     f"`{STALE_LOCK}`, which leaves out the check that your `uv.lock` matches your `pyproject.toml`.", "")
         self.add("", f"Check your files against this {what}. The command prints nothing when they match, and otherwise shows what "
-                 "differs:", "", "```bash", f"git check {sha[:12]}", "```", "",
+                 "differs:", "", "```bash", f"git check {sha[:12]}" + (f" {STALE_LOCK}" if stale else ""), "```", "",
                  f"If you are stuck, this command puts the files of this {what} in place of yours. A file that you made yourself "
                  "stays:", "",
                  "```bash", catch_up(before, sha), "```", "")
@@ -365,7 +387,7 @@ def stop_page(
                  "delete it if `git check` lists it:", "",
                  "```bash", catch_up(None, stop["start"]), "```", "")
     page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"], stop["start"] if not stop["moves"] else None)
-    if not stop["moves"] and stop["start"]:
+    if not stop["moves"]:   # the first part too: its check says that the learner's clone is right
         page.check(stop["commit"], stop["start"], "part")
     if stop["moves"]:
         before = f"[The code before this part]({page.tree(stop['start'])}). " if stop["start"] else ""
@@ -425,25 +447,133 @@ def loose_kinds(
 def check_lines(
     facts: dict,  # The facts of a tutorial
 ) -> list[str]:  # The commands that set up git check in the learner's clone
-    """Make the commands that add `git check SHA` to the learner's clone. Without `loose`, it stages every file and lists the
+    """Make the commands that add `git check SHA` to the learner's clone. It stages every file in an index of its own, a
+    copy of git's index, so a new file counts too and the learner's index stays as it was. Without `loose`, it lists the
     files that differ from the commit. With `loose`, it compares each pyproject.toml that loose names by the names of its
-    packages, leaves the lines of a uv.lock out but runs `uv lock --check`, and checks only that any other file that loose
-    names is there, as timewalk does."""
+    packages, leaves the lines of a uv.lock out but runs `uv lock --check`, unless `--stale-lock` follows SHA, and checks
+    only that any other file that loose names is there, as timewalk does."""
     names, lock, other = loose_kinds(facts)
     skipped = lock + other   # their lines are not compared
+    # git add -A stages every file but the ignored ones, as git's index would have them, in .git/check-index
+    index = ('i="$(git rev-parse --git-path check-index)" && { cp "$(git rev-parse --git-path index)" "$i" 2>/dev/null || rm -f "$i"; } '
+             '&& export GIT_INDEX_FILE="$i" && git add -A && ')
     if not (names or skipped):
-        body = 'git add -A && git diff --cached --stat "$1"'
+        body = index + 'git diff --cached --stat "$1"'
     else:
-        body = 'git add -A && git diff --cached "$1" -- ":/"' + "".join(f' ":(top,exclude,glob){glob}"' for glob in skipped)
+        body = index + 'git diff --cached "$1" -- ":/"' + "".join(f' ":(top,exclude,glob){glob}"' for glob in skipped)
         if skipped:   # the project's copy and the learner's are both there, or both not
             body += ' && git diff --cached --name-status --diff-filter=AD "$1" --' + "".join(f' ":(top,glob){glob}"' for glob in skipped)
-        if lock:   # the learner's uv.lock fits the learner's pyproject.toml
-            body += ' && { [ ! -f uv.lock ] || uv lock --check -q; }'
+        if lock:   # the learner's uv.lock fits the learner's pyproject.toml, unless the project's own does not at this move
+            body += f' && {{ [ "$2" = {STALE_LOCK} ] || [ ! -f uv.lock ] || uv lock --check -q; }}'
     lines = [f"git config alias.check '!f() {{ {body}; }}; f'"]
     if names:   # a glob with no / names a file at the top, as in timewalk; git's attributes would match it in any folder
         attributes = [f"echo '{glob if '/' in glob else '/' + glob} diff=names' >> .git/info/attributes" for glob in names]
         lines = [*attributes, f'git config diff.names.textconv "{NAMES}"', *lines]
     return lines
+
+
+def lock_cache() -> Path:  # The folder of the results of uv lock --check, one file for each key
+    "Find the cache of the lock checks, in the user's cache folder."
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "walk-kit" / "locks"
+
+
+LOCK_FILES = {"pyproject.toml", "uv.lock", "uv.toml"}   # the files whose text uv lock --check reads to decide
+
+
+def lock_key(
+    repo: Path,  # The project
+    sha: str,  # A commit
+    version: str,  # What uv --version prints
+) -> str:  # The name of the commit's result in the cache
+    """Name a result by the uv version and the blob ids of every pyproject.toml, uv.lock and uv.toml of the commit, so a
+    retag that keeps these files finds its result again."""
+    listed = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "-z", sha], capture_output=True, check=False)
+    if listed.returncode:
+        raise PagesError(f"cannot read commit {sha[:12]} in {repo}: {listed.stderr.decode(errors='replace').strip()}")
+    entries = [entry.decode(errors="surrogateescape") for entry in listed.stdout.split(b"\0") if entry]   # "MODE blob ID\tPATH"
+    files = sorted(entry for entry in entries if entry.split("\t", 1)[1].rsplit("/", 1)[-1] in LOCK_FILES)
+    return hashlib.sha256("\n".join([version, *files]).encode(errors="surrogateescape")).hexdigest()
+
+
+def lock_env(
+    blank: Path,  # An empty folder, for uv's user and system settings
+) -> dict[str, str]:  # The environment for uv lock --check
+    """Make an environment without the author's own uv settings: no UV_ variable but the cache folder, and no uv.toml of
+    the user or the system. The project's own pyproject.toml and uv.toml still decide."""
+    env = {name: value for name, value in os.environ.items() if not name.startswith("UV_") or name == "UV_CACHE_DIR"}
+    return {**env, "XDG_CONFIG_HOME": str(blank), "XDG_CONFIG_DIRS": str(blank), "UV_NO_PROGRESS": "1"}
+
+
+def lock_fails(
+    repo: Path,  # The project
+    sha: str,  # A commit with a uv.lock at the top
+) -> tuple[bool | None, str]:  # True if uv lock --check fails on the commit's own files, False if it passes, None if uv cannot tell; and what uv said last
+    """Run `uv lock --check` on a commit's files, in a scratch folder, offline first and then online when the cache of uv
+    lacks a package. The project is not changed. A result is kept in the cache, by the uv version and the files; an
+    undecided one is not kept."""
+    version = subprocess.run(["uv", "--version"], capture_output=True, text=True, check=False).stdout.strip()
+    cached = lock_cache() / lock_key(repo, sha, version)
+    if cached.is_file():
+        return cached.read_text().strip() == "stale", ""
+    found, said = None, ""
+    with tempfile.TemporaryDirectory() as scratch:
+        tree, blank = Path(scratch) / "tree", Path(scratch) / "blank"
+        blank.mkdir()
+        index = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}   # an index of its own: the project's stays as it is
+        for args in (["read-tree", sha], ["checkout-index", "-a", f"--prefix={tree}/"]):   # writes a link as a link, and follows none
+            done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False, env=index)
+            if done.returncode:
+                raise PagesError(f"cannot read commit {sha[:12]} in {repo}: {done.stderr.strip()}")
+        for offline in (["--offline"], []):
+            try:
+                done = subprocess.run(["uv", "lock", "--check", "-q", *offline], cwd=tree, capture_output=True, text=True, check=False,
+                                      env=lock_env(blank), timeout=300)
+            except subprocess.TimeoutExpired:
+                said = "uv lock --check took more than 5 minutes"
+                continue
+            said = done.stderr.strip().splitlines()[-1] if done.stderr.strip() else said
+            if done.returncode == 0:
+                found = False
+            elif "needs to be updated" in done.stderr:
+                found = True
+            if found is not None:
+                break
+    if found is not None:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text("stale\n" if found else "current\n")
+    return found, said
+
+
+def stale_locks(
+    repo: Path,  # The project
+    facts: dict,  # The facts of a tutorial
+) -> list[str]:  # The commits of its checks whose own uv.lock does not match their pyproject.toml
+    """Find the commits that Build it yourself checks against, where `uv lock --check` fails on the project's own files. A
+    tutorial may change pyproject.toml in one move and run `uv lock` in the next. At the first, `git check` gets
+    `--stale-lock`, so a learner whose files are the commit's passes. Only a walk whose loose names uv.lock runs uv lock --check.
+    It raises PagesError when uv is missing or cannot tell, so that no page gets a check that fails a learner."""
+    if facts["walk"]["kind"] != "tutorial" or not loose_kinds(facts)[1]:
+        return []
+    if not shutil.which("uv"):
+        raise PagesError("uv is not installed, and this walk's loose names uv.lock. Install uv, so that the pages can say at "
+                         "which moves the project's own uv.lock is out of date")
+    shas = [move["commit"] for stop in facts["stops"] for move in stop["moves"]]
+    shas += [stop["commit"] for stop in facts["stops"] if not stop["moves"] and stop["start"]]
+    stale = []
+    for sha in dict.fromkeys(shas):
+        if subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True, check=False).returncode:
+            raise PagesError(f"{repo} does not have commit {sha[:12]}, which the facts name")
+        has = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{sha}:uv.lock"], capture_output=True, check=False)
+        if has.returncode:
+            continue
+        fails, said = lock_fails(repo, sha)
+        if fails is None:
+            raise PagesError(f"uv cannot tell whether the uv.lock of commit {sha[:12]} is up to date, offline or online"
+                             f"{': ' + said if said else ''}. Check that uv lock --check runs at that commit: install uv, or go "
+                             "online once so that uv's cache has the packages, and run again")
+        if fails:
+            stale.append(sha)
+    return stale
 
 
 def clone_lines(
@@ -461,12 +591,14 @@ def clone_lines(
             "difference." if names else "")
     if lock:   # check_lines leaves out uv.lock's lines, and runs uv lock --check
         note += (" It does not compare the lines of `uv.lock`. It checks that you and the project both have a `uv.lock`, or both "
-                 "have none. It also checks that your `uv.lock` is up to date with your `pyproject.toml`.")
+                 "have none. It also checks that your `uv.lock` is up to date with your `pyproject.toml`. Where the project's own `uv.lock` is "
+                 f"not, the page gives `git check` the option `{STALE_LOCK}`, which leaves out that check.")
     clone = ("You build the project in a clone of your own, on a branch `mine` that starts where this walk starts. Run the "
              "commands of these pages in its top folder.")
     return ["", f"{'#' * level} Get the project", "", clone, "",
             "```bash", f"git clone {github(facts)}", f"cd {name}", f"git switch -c mine {start}", "```", "",
-            "Then add the command `git check`, which compares your files with the project's after each move." + note, "",
+            "Then add the command `git check`, which compares your files with the project's after each move, and leaves what "
+            "`git add` has staged as it was." + note, "",
             "```bash", *check_lines(facts), "```", ""]
 
 
@@ -673,6 +805,7 @@ def class_pages(
             facts = export(repo, toc, ident, github, Path(scratch), timewalk)
             if facts["errors"]:
                 raise PagesError(f"timewalk-check finds errors in walk {ident}. Run just check:\n  " + "\n  ".join(facts["errors"]))
+            facts["stale_locks"] = stale_locks(repo, facts)
             if facts["walk"]["kind"] == "tutorial":
                 gaps += len(source_gaps(facts))
             words += len(our_words(facts))
@@ -704,6 +837,12 @@ def check_class(
         for entry in page_walks(folder / "toc.toml"):
             try:
                 facts = export(repo, folder / "toc.toml", entry["id"], github, Path(scratch))
+            except PagesError as error:
+                print(f"walk {entry['id']}: {error}")
+                problems += 1
+                continue
+            try:
+                facts["stale_locks"] = stale_locks(repo, facts)
             except PagesError as error:
                 print(f"walk {entry['id']}: {error}")
                 problems += 1
@@ -775,7 +914,7 @@ def main() -> int:  # The exit code
     parser.add_argument("--site", type=Path, help="the folder for the website")
     parser.add_argument("--check", action="store_true", help="check the walk's text, and write nothing")
     parser.add_argument("--class", dest="folder", type=Path, help="check every walk of this class folder, in place of FACTS")
-    parser.add_argument("--repo", type=Path, help="with --class: the project")
+    parser.add_argument("--repo", type=Path, help="with --class: the project; with FACTS: the project, to find the moves whose own uv.lock is out of date")
     parser.add_argument("--github", help="with --class: the project on GitHub, https://github.com/OWNER/NAME")
     parser.add_argument("--pages", type=Path, help="with --class: write the pages of every walk into this folder, and check nothing")
     args = parser.parse_args()
@@ -800,6 +939,14 @@ def main() -> int:  # The exit code
     if not args.facts:
         parser.error("give FACTS, or --class")
     facts = load(args.facts)
+    if args.repo:
+        try:
+            facts["stale_locks"] = stale_locks(args.repo.expanduser().resolve(), facts)
+        except PagesError as error:
+            print(f"render: {error}", file=sys.stderr)
+            return 1
+    elif facts["walk"]["kind"] == "tutorial" and loose_kinds(facts)[1] and not args.check:
+        print("render: without --repo, every git check runs uv lock --check, even where the project's uv.lock is out of date", file=sys.stderr)
     if args.check:
         problems = source_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
         words = our_words(facts)

@@ -4,11 +4,14 @@
     python3 style.py --class DIR      check the class in DIR
     python3 style.py -v               also show the soft notes, for a person to judge
     python3 style.py PAGE.md ...      check these files, such as the pages that render.py writes
-    python3 style.py --repo DIR       let the review read the project in DIR
+    python3 style.py --repo DIR       let the review read the project in DIR, at the commit of each section of the notes
+    python3 style.py --all            review each file whole, not only the text changed since the last commit
 
 style/check.py checks the mechanical rules of the guide: the length of a sentence, a colon, a contraction, a dash. It
 is not a review of the writing. When the form passes, review.py asks a model to review the text that changed since the
-last commit, for a reader of 12, with the reviewer's prompt in review/writing.md. A finding fails the check too.
+last commit, for a reader of 12, with the reviewer's prompt in review/writing.md. A finding fails the check too. With
+--all, the model reviews each file whole: once, when a class takes up the review, so that the text written before it is
+reviewed too, and after big edits. The limit of 3 reviews of a file between two commits holds with --all too.
 
 The script checks the prose that people outside the class's authors read, and nothing else of its folder: README.md,
 the notes and intro of every walk, and the Markdown files that the slides manifest of each walk names. The walks are
@@ -133,6 +136,7 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
     parser.add_argument("--class", dest="folder", type=Path, default=Path("."), help="the class folder (default: this folder)")
     parser.add_argument("-v", action="store_true", help="also show the soft notes, for a person to judge")
     parser.add_argument("--repo", type=Path, help="the project, which the review may read")
+    parser.add_argument("--all", action="store_true", help="review each file whole, not only its change since the last commit")
     parser.add_argument("files", nargs="*", type=Path, help="files to check in place of the class's prose, such as rendered pages")
     args = parser.parse_args()
     folder = args.folder.expanduser().resolve()
@@ -162,9 +166,9 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
             failed = failed or bool(hard)
     if failed or problems:
         return 1
-    from review import KIT, run  # here: review.py imports this module
+    from review import run  # here: review.py imports this module
 
-    count, broke = run(files, False, [folder, KIT] + ([args.repo.expanduser().resolve()] if args.repo else []))
+    count, broke = run(files, args.all, folder, args.repo.expanduser().resolve() if args.repo else None)
     for path in broke:
         print(f"style: the review of {path} failed", file=sys.stderr)
     return 1 if count or broke else 0

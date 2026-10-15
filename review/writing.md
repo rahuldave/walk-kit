@@ -25,6 +25,19 @@ chain of definitions.
 Check each fact about the code against the code before you report it or put it in a rewrite. Read the
 folders that your tools can read. Never guess how the code works.
 
+The notes of a class walk through the history of a project, one step at a time. A table of the commit of each
+section can come before the text. Then each section speaks of the project at its own commit, and not at the
+last one.
+
+Read the project at the section's commit with `git -C REPO show COMMIT:PATH`, `git -C REPO ls-tree
+-r --name-only COMMIT` and `git -C REPO log`, as the table shows. Do not read the files of the project's folder
+for such a section, because they hold its last commit. A file that is not at the section's commit does not
+exist yet for its reader. Take each line number from the file at that commit. A hunk of a diff says which
+section it is in. Text in no section of the table speaks of the project as a whole.
+
+Run each git command alone, and write out the path of the repository in full. A shell variable, a loop, a
+pipe, `;` or `&&` makes the command refused. Any other command is refused too.
+
 Rank your findings by how much each hurts the reader, the worst first. Report at most five for a file. Give
 each finding a rewrite that reads as natural prose in its passage. The verdict is "pass", with no findings, when
 nothing would make the reader stumble, or mislead the reader. Any finding fails the file.

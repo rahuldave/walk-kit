@@ -1,13 +1,14 @@
 """Follow a Build it yourself page as a student would, and fail if a `git check` of the page fails.
 
-    python3 follow.py PAGE --repo DIR --work DIR [--log FILE]
+    python3 follow.py PAGE --repo DIR --work DIR [--log FILE] [--github]
     python3 follow.py PAGE ... --check-output [--report-dir DIR]      also ask a model whether the text matches what ran
 
 PAGE is a build.md that render.py wrote, or a page of the website in build/. The script reads the page's ```bash
 blocks (and ```sh and ```shell, indented in a list item or not) in order and runs each command with `sh -c` in a clone of the project, as a student types it. The clone is
 made in --work, an empty scratch folder, from --repo, a local clone of the project: a `git clone https://github.com/...`
 line clones --repo, into the folder that the page's `cd` names. A `curl` of a commit's or a comparison's diff on GitHub
-becomes the same `git diff` in --repo, so the script needs no network for the patches.
+becomes the same `git diff` in --repo, so the script needs no network for the patches. With --github, the clone and
+every curl run as the page writes them, from GitHub, as a student's do; --repo is then only read for its hashes.
 
 A command that fails is logged, and is not a failure: the notes run tests that fail on purpose. Only `git check SHA`
 decides. It fails if it prints anything or exits with an error. The catch-up command right after a check, `git restore
@@ -199,8 +200,9 @@ class Student:
         self,
         repo: Path,  # The local clone of the project
         work: Path,  # The scratch folder, empty
+        github: bool = False,  # True to clone and fetch the diffs from GitHub as the page writes them
     ):
-        self.repo, self.work, self.cwd = repo, work, work
+        self.repo, self.work, self.cwd, self.github = repo, work, work, github
         self.log: list[str] = []
         self.checks, self.failed, self.heading = 0, 0, ""
         self.groups: list[int] = []  # the process groups of the commands, killed at the end: a command may leave a server running
@@ -220,7 +222,10 @@ class Student:
         self,
         command: str,  # A command of the page
     ) -> str:  # The command to run: a diff from GitHub is taken from the local clone
-        "Replace a curl of a diff on GitHub by the same git diff in the local clone."
+        "Replace a curl of a diff on GitHub by the same git diff in the local clone, unless the student fetches from GitHub."
+        if self.github:
+            return command
+
         def local(found: re.Match) -> str:
             repo = shlex.quote(str(self.repo))
             if found.group("sha"):
@@ -238,10 +243,12 @@ class Student:
         if words[:2] == ["git", "clone"]:   # the project, from the local clone, into the folder that the page's cd names
             url = next(word for word in words[2:] if not word.startswith("-"))
             name = url.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
-            done = subprocess.run(["git", "clone", "-q", str(self.repo), name], cwd=self.work, capture_output=True, text=True, check=False)
+            source = url if self.github else str(self.repo)
+            done = subprocess.run(["git", "clone", "-q", source, name], cwd=self.work, capture_output=True, text=True, check=False,
+                                  env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
             self.note(command, done.returncode, done.stdout + done.stderr)
             if done.returncode:
-                raise SystemExit(f"follow: cannot clone {self.repo}: {done.stderr.strip()}")
+                raise SystemExit(f"follow: cannot clone {source}: {done.stderr.strip()}")
             return 0, ""
         if len(words) == 2 and words[0] == "cd":
             target = (self.cwd / words[1]).resolve()
@@ -390,6 +397,7 @@ def main() -> int:  # The exit code: 1 if a check failed or the output check fou
     parser.add_argument("page", type=Path, help="a build.md, or a page of the website in build/")
     parser.add_argument("--repo", type=Path, required=True, help="a local clone of the project")
     parser.add_argument("--work", type=Path, required=True, help="an empty scratch folder, made if missing")
+    parser.add_argument("--github", action="store_true", help="clone the project and fetch each diff from GitHub, as the page writes them")
     parser.add_argument("--log", type=Path, help="write each command, its exit code and its output here, as Markdown")
     parser.add_argument("--check-output", action="store_true", help="ask a model whether the text matches the output, if claude is installed")
     parser.add_argument("--report-dir", type=Path, default=Path("."), help="the folder for reports/follow/ (default: this folder)")
@@ -407,7 +415,7 @@ def main() -> int:  # The exit code: 1 if a check failed or the output check fou
         setup, skip = site_start(page, blocks)
         blocks = setup + blocks
     expected = checks_in(text)
-    student = Student(repo, work)
+    student = Student(repo, work, args.github)
     student.log += [f"# follow.py: {page.name}", "", f"The commands of {page}, run in {work}.", ""]
     try:
         student.follow(blocks, skip)

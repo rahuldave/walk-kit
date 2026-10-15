@@ -87,7 +87,7 @@ check:
         TIMEWALK={{ quote(timewalk) }} python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}"
     fi
 
-# Check the README, notes and slides against the writing guide: their form, then a review by a model. -v shows the soft notes
+# Check the README, notes and slides against the writing guide: their form, then a review by a model. -v shows the soft notes, --all reviews each file whole
 style *args:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -110,8 +110,9 @@ pages:
         python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}" --pages build/pages
     fi
 
-# Follow every Build it yourself page in a scratch clone, as a student would: every git check must pass. Logs go to build/follow
-follow:
+# Follow every Build it yourself page in a scratch clone, as a student would: every git check must pass. Logs go to build/follow.
+# Then each part page of the website, as a student who starts at that part. just follow --github fetches from GitHub, as a student does
+follow *args:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f toc.toml ]; then echo "follow: this class has no toc.toml, so it has no pages to follow"; exit 0; fi
@@ -133,7 +134,14 @@ follow:
         id=$(basename "$(dirname "$page")")
         echo "follow: walk $id"
         python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/$id" --log "build/follow/$id.md" \
-            ${check[@]+"${check[@]}"} || failed=1
+            ${check[@]+"${check[@]}"} "$@" || failed=1
+    done
+    # A part page has the same text as its part of build.md, so the model does not check it again
+    for page in "$out"/site/build/*.qmd "$out"/sites/*/build/*.qmd; do
+        name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
+        echo "follow: part page $name"
+        python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/part-$name" --log "build/follow/part-$name.md" "$@" \
+            || failed=1
     done
     exit "$failed"
 

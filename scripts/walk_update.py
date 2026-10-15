@@ -75,7 +75,8 @@ from walk_init import FILES
 OWN = {Path(name).parts[0].casefold() for name in FILES if name != "walk.md"} | {"toc.toml", ".git", "site", "sites"} | {
     found.casefold() for found in re.findall(r"^/([^/\s]+)/$", (TEMPLATES / "walk" / "gitignore").read_text(encoding="utf-8"), re.MULTILINE)}
 WALK_MARK = "--replay worktree"  # a line of the walk template's justfile, and of no other justfile
-SOURCE = re.compile(r'^timewalk\s*:=\s*env\("TIMEWALK",\s*"([^"]*)"\)', re.MULTILINE)  # where a justfile takes timewalk from
+# Where a justfile takes timewalk from: env("TIMEWALK", "..."), or "..." alone in the justfiles of the first walk-kit
+SOURCE = re.compile(r'^timewalk\s*:=\s*(?:env\("TIMEWALK",\s*)?"([^"]*)"', re.MULTILINE)
 TOUCHED: list[Path] = []  # every path that target() let the script write, delete or make, in order
 
 

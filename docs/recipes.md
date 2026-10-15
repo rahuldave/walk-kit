@@ -15,6 +15,7 @@ class with `toc.toml`, a recipe that takes an `ID` uses the walk with that id. W
 | `just check` | Checks the notes and slides of every walk against the steps, then the pages that students read |
 | `just style` | Checks the README, notes, intros and slides against the writing guide, then has a model review the text that changed |
 | `just style -v` | The same, and also shows the soft notes, such as a passive verb, for you to judge |
+| `just style --all` | The same, but the model reviews each file whole. Run it once when the class takes up the review, and after big edits |
 | `just pages` | Makes the pages that students read, into `bla-walk` or `build/pages`, and commits nothing |
 | `just follow` | Makes the pages, then follows each Build it yourself page in a scratch clone. Logs go to `build/follow/` |
 | `just draft ID` | Prints a draft section for each move of a tutorial that the notes do not have |
@@ -49,8 +50,8 @@ of the recipe `check`, from the comment about the pages that students read.
 
 | Recipe | What it does |
 |---|---|
-| `just test` | Makes the pages of the walks of [timewalk-test](https://github.com/rahuldave/timewalk-test), and follows each Build it yourself page. Every `git check` must pass. It calls no model |
-| `just style` | Checks `README.md` and `templates/walk/README.md` against the writing guide, then has a model review them |
+| `just test` | Makes the pages of the walks of [timewalk-test](https://github.com/rahuldave/timewalk-test), and follows each Build it yourself page. Every `git check` must pass. It runs the tests in `tests/` first. It calls no model |
+| `just style` | Checks `README.md` and `templates/walk/README.md` against the writing guide, then has a model review what changed in them. `just style --all` reviews them whole |
 | `just docs` | Builds this website from `docs/` with smalldocs, and serves it at `http://127.0.0.1:8001` |
 
 `just test` expects timewalk-test in `~/Projects/timewalk-test`, or in the folder that `TIMEWALK_TEST` names. Run

@@ -82,6 +82,9 @@ A move section opens with the problem, gives the change piece by piece, and ends
 it. The notes never copy the code of a file. A line `do$ COMMAND` gives the command that writes a file, and a line
 `patch$ PATH` says that the move changes `PATH` by its patch.
 
+A student who builds the project never commits. So write `rm` and `mv` on a `do$` line, not `git rm` and `git mv`. A
+`git rm` of a file that the walk changed fails, and so does a `git mv` of a file that the walk made.
+
 `slides/slides.toml`, the manifest, says which slides show at each step. Once `slides.example.toml` gives every step
 a slide, rename it to `slides.toml`. Then take the `#` off the line `slides = "slides/slides.toml"` in `toc.toml`.
 timewalk does not start on a manifest that misses a step.

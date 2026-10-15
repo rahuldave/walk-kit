@@ -493,7 +493,7 @@ narrative has no mode, and shows the `watch` blocks.
   line to look at.
 - **Write a command that makes the move as a `do$` line in the shared text.** Do mode is for the learner to run,
   and watch mode is for the learner to watch. A command makes the move if it changes the files to what the commit
-  of the move has. Examples are `uv add`, `uv lock`, `git rm`, `ruff check --fix` and `chmod +x`. In do mode, a
+  of the move has. Examples are `uv add`, `uv lock`, `rm`, `ruff check --fix` and `chmod +x`. In do mode, a
   `do$` line is a command to run. In watch mode, the page shows the command, with nothing to run.
 - **Keep a check as a shared `$` line,** for example `$ just test`. A `$` line runs in both modes, so it must
   change no tracked file.
@@ -633,8 +633,12 @@ commands from the facts file:
 - **Get the project.** `git clone`, then `git switch -c mine START`, where `START` is the commit where the walk
   starts.
 - **`git check`.** **Get the project** also sets up a git alias, so that `git check SHA` compares the student's files with
-  a commit. It runs `git add -A`, so a new file counts too, and prints nothing when the files match. After each
-  move, the page gives `git check` with the move's commit.
+  a commit. It runs `git add -A` in a copy of git's index, `.git/check-index`, so a new file counts too, and the
+  student's own index does not change. It prints nothing when the files match. After each move, the page gives
+  `git check` with the move's commit. The student never commits, so git's index does not hold the student's work. A `git rm` of a
+  file that the walk changed fails with "local modifications", and a `git mv` of a file that the walk made fails with
+  "not under version control". Write `rm` and `mv` in the notes in their place. `git check` compares only the files, so
+  it needs nothing from git's index.
 - **Take the files of a move.** A student who is stuck runs
   `git restore --source BEFORE --staged -- :/ && git restore --source SHA --staged --worktree -- :/`. The first
   half puts the files of the commit before the move in git's index. The second half deletes each file that the
@@ -649,6 +653,10 @@ runs `uv add` a month later still matches. `git check` aims for the same:
   requirement before git compares it.
 - A `uv.lock` is left out of the comparison, because a newer package can bring new packages with it. `git check`
   shows a `uv.lock` that only one side has, and runs `uv lock --check` on the student's own.
+- A move can change `pyproject.toml` and leave `uv lock` to the next move. At that move, the project's own `uv.lock`
+  fails `uv lock --check`. The renderer finds such moves: it runs `uv lock --check` on the files of each commit in a
+  scratch folder, offline first, and keeps the result in `~/.cache/walk-kit/locks`. At such a move, the page gives
+  `git check SHA --stale-lock`, which leaves out `uv lock --check`.
 - Any other file that `loose` names has to be there when the commit has it, and not there when the commit does not.
 
 With `loose`, `git check` prints the lines that differ, not a list of files, because the text conversion works
@@ -666,6 +674,9 @@ the project deleted before the stop stays too, and the page says to delete it if
 
 GitHub's diff has no data for a binary file, so a `patch$` line of a binary file gives
 `git restore --source SHA --worktree -- ':(top,literal)PATH'` in place of a patch.
+
+A `patch$` line can name a file that the change renames by its old path. `git apply --include` matches the new path
+of a renamed file, so the command names the new path. The patch then deletes the old file and writes the new one.
 
 A narrative has one way of reading, Read the tutorial. The app keeps its own switch, **Do** and **Watch**.
 
@@ -731,7 +742,8 @@ again. Edit the notes in the class folder. A walk after the first cannot have th
 
 On each push to `main`, the workflow builds `site/` and every folder in `sites/` with smalldocs. GitHub Pages then
 publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
-`https://OWNER.github.io/bla-walk/ID/`. Do these steps once for each walk repository:
+`https://OWNER.github.io/bla-walk/ID/`. An owner with a custom domain gets that domain in place of `OWNER.github.io`.
+The workflow publishes nothing when `site/` is missing. Do these steps once for each walk repository:
 
 1. Open the repository on GitHub, then **Settings**, then **Pages**.
 2. Under **Source**, choose **GitHub Actions**.

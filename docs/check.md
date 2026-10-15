@@ -53,6 +53,13 @@ skips `AGENTS.md` and `CLAUDE.md`, which are for agents.
    would stumble, with a rewrite. A text that passed is kept in a cache, so a second run of the same text costs
    nothing.
 
+The model checks each fact of the notes against the project as it was at that point of the walk. For example, the
+section `### step-02.1` speaks of the first commit of step-02. A file that step-05 makes does not exist there yet.
+
+Before the text, the model gets a table that gives each section of the notes its commit. A section `## step-NN` has
+the tag step-NN, and `### step-NN.k` the move's commit. A stop of a walk with notes of its own has the commits of its
+`{{include ...}}` lines. The model reads the files at that commit with `git show`, and may run no other command.
+
 The findings of each file go to `reports/writing/`, at the path of the file with `.md` added. Under each finding
 that you fix, write a line `- Fixed: ...`. A finding without that line is left for the owner of the class. A file is
 reviewed at most three times between two commits. The first two reviews fail on a finding. The third passes, and leaves its findings for you to judge.
@@ -61,3 +68,10 @@ Git ignores `reports/writing/` and `reports/follow/`. It tracks any other report
 
 More rounds make the prose
 stiff, so rewrite by hand instead.
+
+### Review whole files with --all
+
+`just style` reviews only the text that changed since the last commit. So text that was written before the class took up
+the review is never reviewed. `just style --all` has the model review each file whole. Run it once, when a class takes
+up the review, and again after big edits. It costs one review of each file. The limit of three reviews of a file between
+two commits holds for `--all` too.

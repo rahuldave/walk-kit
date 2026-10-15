@@ -59,7 +59,7 @@ def walk_text(
 def toc_walks(
     toc: Path,  # A table of contents, toc.toml, of a class with several walks
     where: str = "the class folder",  # What holds it, for the messages: the class folder or the walk repository
-) -> list[dict[str, str | None]]:  # Each walk in order: its id, and its folder, notes, manifest, intro and shared notes from the folder of toc.toml, or None
+) -> list[dict[str, str | None]]:  # Each walk in order: its id, its folder, notes, manifest, intro and shared notes from the folder of toc.toml, or None, and its tags
     """Read the walks of a table of contents: where the folder, the notes, the slides, the intro and the shared notes of each one are.
 
     Raises `TocError` for a toc.toml that cannot be read, or that names a path that is absolute, has a `..`, or leads out
@@ -88,7 +88,8 @@ def toc_walks(
                                "from the folder of toc.toml, with no `..`")
             if not (toc.parent / path).resolve().is_relative_to(toc.parent.resolve()):
                 raise TocError(f"in {toc}, the {key} of walk {walk.get('id')} leads outside {where}: {path}")
-        found.append({"id": walk.get("id"), **paths})
+        # the tags of its steps, as timewalk reads them: step-* unless the walk names its own, such as parts-*
+        found.append({"id": walk.get("id"), **paths, "tags": walk.get("tags") or "step-*"})
     return found
 
 
