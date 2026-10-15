@@ -4,6 +4,8 @@
 test_class := env("TIMEWALK_TEST", home_directory() / "Projects/timewalk-test")
 # The address on GitHub that timewalk-test's pages link to
 test_github := "https://github.com/rahuldave/tally"
+# The walk repository on GitHub whose pages just test-github follows and checks
+test_walk := "https://github.com/rahuldave/tally-walk"
 
 [private]
 default:
@@ -14,15 +16,20 @@ style *args:
     python3 style/check.py README.md templates/walk/README.md
     python3 scripts/review.py --class . {{ args }} README.md templates/walk/README.md
 
-# Render the pages of timewalk-test's walks, and follow each Build it yourself page: every git check must pass
+# Render the pages of timewalk-test's walks, follow each Build it yourself page (every git check must pass), and check each page to read
 test:
     #!/usr/bin/env bash
     set -euo pipefail
-    class={{ quote(test_class) }}
-    test -d "$class/repo/.git" || { echo "test: $class/repo is missing; run just build in $class" >&2; exit 1; }
+    source={{ quote(test_class) }}
+    test -d "$source/repo/.git" || { echo "test: $source/repo is missing; run just build in $source" >&2; exit 1; }
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
     python3 -m unittest discover -s tests
+    # A copy of the class, so that a just build in timewalk-test during the run cannot change the pages under the checks
+    class="$scratch/class"
+    mkdir "$class"
+    git clone -q --no-local "$source/repo" "$class/repo"
+    for name in toc.toml notes.md walks slides; do if [ -e "$source/$name" ]; then cp -R "$source/$name" "$class/"; fi; done
     python3 scripts/render.py --class "$class" --repo "$class/repo" --github {{ quote(test_github) }} --pages "$scratch/pages" > /dev/null
     failed=0
     for page in "$scratch"/pages/walks/*/build.md; do
@@ -37,6 +44,39 @@ test:
         echo "test: part page $name"
         python3 scripts/follow.py "$page" --repo "$class/repo" --work "$scratch/work/part-$name" > /dev/null || { echo "test: FAIL $name"; failed=1; }
     done
+    # Each page to read, Read the tutorial and a narrative's, on GitHub and on the website: nothing to run, every move, every link
+    shopt -s nullglob
+    echo "test: the pages to read"
+    python3 scripts/read_check.py "$scratch"/pages/walks/*/read.md "$scratch"/pages/site/read/*.qmd "$scratch"/pages/sites/*/read/*.qmd \
+        --repo "$class/repo" --toc "$class/toc.toml" | grep -v '^ok ' || failed=1
+    exit "$failed"
+
+# Follow every Build it yourself page and check every page to read of the walk repository on GitHub, against GitHub itself
+test-github walk=test_walk:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scratch=$(mktemp -d)
+    trap 'rm -rf "$scratch"' EXIT
+    git clone -q {{ quote(walk) }} "$scratch/walk"
+    project=$(sed -nE 's/^project := "(.*)"$/\1/p' "$scratch/walk/justfile")
+    upstream=$(sed -nE 's/^upstream := "(.*)"$/\1/p' "$scratch/walk/justfile")
+    git clone -q "https://github.com/$upstream/$project" "$scratch/repo"
+    pages="$scratch/walk"
+    failed=0
+    shopt -s nullglob
+    for page in "$pages"/walks/*/build.md; do
+        id=$(basename "$(dirname "$page")")
+        echo "test-github: walk $id"
+        python3 scripts/follow.py "$page" --repo "$scratch/repo" --work "$scratch/work/$id" --github 2>&1 | tail -1 || { echo "test-github: FAIL $id"; failed=1; }
+    done
+    for page in "$pages"/site/build/*.qmd "$pages"/sites/*/build/*.qmd; do
+        name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
+        echo "test-github: part page $name"
+        python3 scripts/follow.py "$page" --repo "$scratch/repo" --work "$scratch/work/part-$name" --github 2>&1 | tail -1 || { echo "test-github: FAIL $name"; failed=1; }
+    done
+    echo "test-github: the pages to read"
+    python3 scripts/read_check.py "$pages"/walks/*/read.md "$pages"/site/read/*.qmd "$pages"/sites/*/read/*.qmd \
+        --repo "$scratch/repo" --github | grep -v '^ok ' || failed=1
     exit "$failed"
 
 # Build the website of walk-kit from docs/ with smalldocs, and serve it at http://127.0.0.1:8001

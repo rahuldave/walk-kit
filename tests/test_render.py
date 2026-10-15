@@ -365,6 +365,35 @@ class FirstPart(Case):
         self.assertNotIn(f"git check {sha[:12]}", render.stop_page(facts, stop, 1, "watch", True))
 
 
+class OneMovePart(unittest.TestCase):
+    "A small walk can select one move as a part, so the part and its move have one name."
+
+    def test_one_id(self) -> None:
+        "The Markdown page gives the id once: the part's, and the move's heading follows it, so a link finds that part."
+        move = {"name": "step-05.1", "number": "5.1", "title": "Top words", "commit": "b" * 40, "parts": [], "files": []}
+        stop = {"name": "step-05.1", "number": "5.1", "title": "Top words", "start": "a" * 40, "commit": "b" * 40, "parts": [],
+                "files": [], "moves": [move]}
+        facts = {"walk": {"kind": "narrative", "github": "https://github.com/o/demo"}, "stops": [stop], "history": {}}
+        for mode in ("watch", "do"):
+            text = "\n".join(render.stop_page(facts, stop, 1, mode, False))
+            self.assertEqual(text.count('<a id="step-05.1"></a>'), 1, text)
+            self.assertIn("### 5.1 Top words", text)
+
+
+
+class CheckAgainst(unittest.TestCase):
+    "Only Build it yourself tells the reader to check files against What changed: a reader of Read the tutorial makes none."
+
+    def test_read_pages_do_not_say_it(self) -> None:
+        "Read the tutorial and a narrative's front page leave the sentence out; Build it yourself and a tutorial's front page have it."
+        for kind in ("tutorial", "narrative"):
+            facts = {"walk": {"id": "w", "title": "Demo", "kind": kind, "github": "https://github.com/o/demo", "loose": []}, "intro": [],
+                     "stops": [], "history": {}}
+            pages = render.markdown_files(facts)
+            self.assertNotIn(render.CHECK_AGAINST, pages["read.md"])
+            self.assertEqual(render.CHECK_AGAINST in pages.get("build.md", ""), kind == "tutorial")
+            self.assertEqual(render.CHECK_AGAINST in render.site_files(facts)["index.qmd"], kind == "tutorial")
+
 
 class IndexCommands(unittest.TestCase):
     "A git rm or git mv on a page fails for a student who never commits when git's index does not hold the file, so the check of a class names it."

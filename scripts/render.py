@@ -58,7 +58,8 @@ WAYS = {
 }
 WHAT_CHANGED = ("Each part ends with a section called **What changed**. It lists every file that the part changes, with a link to "
                 "the file, and then the whole diff of each file, folded. A lockfile and a binary file have a link alone. The text "
-                "above it explains the change. What changed is what you check your files against.")
+                "above it explains the change.")
+CHECK_AGAINST = "What changed is what you check your files against."  # Build it yourself's alone: a reader of Read the tutorial makes no files
 BY_HAND = ("In Build it yourself, a file that a command makes says which command. A diff that is open is a patch. Apply it with the "
            "command in the text, or make the same change in your editor.")
 LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "Gemfile.lock",
@@ -439,6 +440,8 @@ def stop_page(
         heading = f"{'#' * level} {move['number']} {move['title']}".rstrip()
         if site:
             page.add("", f"{heading} {{#{anchor(move['name'])}}}", "")
+        elif anchor(move["name"]) == anchor(stop["name"]):   # a part of one move, as a small walk selects it: the part's id leads here already
+            page.add("", heading, "")
         else:
             page.add("", f'<a id="{anchor(move["name"])}"></a>', "", heading, "")
         page.parts(move["parts"], move["commit"], move["files"], move["name"])
@@ -670,7 +673,7 @@ def markdown_files(
         other = [m for m in ways(facts) if m != mode]
         if other:
             lines[-1] += f" [{WAYS[other[0]][0]}]({WAYS[other[0]][1]}.md) is the other way to read it."
-        lines += ["", WHAT_CHANGED, *(["", BY_HAND] if mode == "do" else []), ""]
+        lines += ["", WHAT_CHANGED + (f" {CHECK_AGAINST}" if mode == "do" else ""), *(["", BY_HAND] if mode == "do" else []), ""]
         intro = [*intro_lines(facts, mode), ""]
         clone = clone_lines(facts, 2) if mode == "do" else []
         if any(p["kind"] == "command" for p in of_mode(facts["intro"], mode)):   # the intro's commands run in the clone
@@ -700,7 +703,8 @@ def site_files(
     sidebar = ["      - index.qmd"]
     if len(ways(facts)) > 1:
         front += ["There are two ways to read this tutorial. Both have the same parts, in the same order.", ""]
-    front += [WHAT_CHANGED, "", *([BY_HAND, ""] if len(ways(facts)) > 1 else [])]
+    front += [WHAT_CHANGED + (f" In Build it yourself, {CHECK_AGAINST}" if len(ways(facts)) > 1 else ""), "",
+              *([BY_HAND, ""] if len(ways(facts)) > 1 else [])]
     for mode in ways(facts):
         name, folder, what = WAYS[mode]
         front += [f"## {name}", "", what, ""]
