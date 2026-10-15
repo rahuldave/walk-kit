@@ -823,6 +823,25 @@ def class_pages(
     return pages, gaps, words
 
 
+INDEX_COMMAND = re.compile(r"(?:^|[;&|(]\s*)git\s+(rm|mv)\b")  # a command that needs git's index to hold the student's work
+
+
+def index_commands(
+    facts: dict,  # The facts of a tutorial
+) -> list[str]:  # A problem for each command of a move that is git rm or git mv
+    """Find each `git rm` and `git mv` that a student runs. The student never commits, so git's index does not hold the
+    student's work: `git rm` of a file that the walk changed, and `git mv` of a file that the walk made, fail."""
+    found = []
+    for stop in facts["stops"]:
+        for move in stop["moves"]:
+            for part in move["parts"]:
+                hit = INDEX_COMMAND.search(part["text"]) if part["kind"] == "command" else None
+                if hit:
+                    found.append(f"{move['name']}: `{part['text']}` fails for a student, who never commits. Write "
+                                 f"`{hit.group(1)}` in its place, without git")
+    return found
+
+
 def check_class(
     folder: Path,  # The class folder, with toc.toml
     repo: Path,  # The project
@@ -847,7 +866,7 @@ def check_class(
                 print(f"walk {entry['id']}: {error}")
                 problems += 1
                 continue
-            found = source_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
+            found = source_gaps(facts) + index_commands(facts) if facts["walk"]["kind"] == "tutorial" else []
             for name, text in markdown_files(facts).items():
                 page = Path(scratch) / "page.md"
                 page.write_text(blank(text), encoding="utf-8")

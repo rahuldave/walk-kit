@@ -365,5 +365,52 @@ class FirstPart(Case):
         self.assertNotIn(f"git check {sha[:12]}", render.stop_page(facts, stop, 1, "watch", True))
 
 
+
+class IndexCommands(unittest.TestCase):
+    "A git rm or git mv on a page fails for a student who never commits, so the check of a class names it."
+
+    def facts(self, *texts: str) -> dict:
+        "Facts of one move with these commands."
+        parts = [{"kind": "command", "text": text, "makes": True, "mode": "shared"} for text in texts]
+        return {"stops": [{"moves": [{"name": "step-01.1", "parts": parts}]}]}
+
+    def test_found(self) -> None:
+        "git rm, git mv, and either after && are named."
+        found = render.index_commands(self.facts("git rm old.py", "git mv a.py b.py", "uv lock && git rm -r build"))
+        self.assertEqual(len(found), 3, found)
+        self.assertIn("Write `mv`", found[1])
+
+    def test_others_pass(self) -> None:
+        "rm, mv, git restore and a word that only starts like it are not named."
+        self.assertEqual(render.index_commands(self.facts("rm old.py", "mv a.py b.py", "git restore x", "git rmdir", "echo git-rm")), [])
+
+    def test_check_class_counts_it(self) -> None:
+        "just check, through check_class, counts a git mv on a page of a tutorial as a problem."
+        facts = self.facts("git mv a.py b.py")
+        facts["walk"] = {"kind": "tutorial", "loose": []}
+        saved = render.export, render.stale_locks, render.page_walks, render.source_gaps, render.markdown_files, render.our_words
+        self.addCleanup(lambda: setattr(render, "export", saved[0]) or setattr(render, "stale_locks", saved[1])
+                        or setattr(render, "page_walks", saved[2]) or setattr(render, "source_gaps", saved[3])
+                        or setattr(render, "markdown_files", saved[4]) or setattr(render, "our_words", saved[5]))
+        render.export = lambda *args: facts
+        render.stale_locks = lambda *args: []
+        render.page_walks = lambda toc: [{"id": "w"}]
+        render.source_gaps = render.our_words = lambda facts: []
+        render.markdown_files = lambda facts: {}
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(render.check_class(Path(folder), Path(folder), "https://github.com/o/demo"), 1)
+
+    def test_a_git_mv_fails_for_the_student(self) -> None:
+        "The reason: after git check, git mv of a file that the student made is refused."
+        with tempfile.TemporaryDirectory() as folder:
+            work = Path(folder)
+            sh(work, "git init -q -b main && echo a > f && git add f && git commit -qm a")
+            for line in render.check_lines({"walk": {"loose": []}}):
+                sh(work, line)
+            sh(work, "echo n > new.py && git check HEAD > /dev/null")
+            self.assertNotEqual(sh(work, "git mv new.py other.py", check=False).returncode, 0)
+            self.assertEqual(sh(work, "mv new.py other.py").returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

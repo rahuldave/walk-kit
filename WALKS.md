@@ -637,7 +637,7 @@ commands from the facts file:
   student's own index does not change. It prints nothing when the files match. After each move, the page gives
   `git check` with the move's commit. The student never commits, so git's index does not hold the student's work. A `git rm` of a
   file that the walk changed fails with "local modifications", and a `git mv` of a file that the walk made fails with
-  "not under version control". Write `rm` and `mv` in the notes in their place. `git check` compares only the files, so
+  "not under version control". Write `rm` and `mv` in the notes in their place. `just check` names each one. `git check` compares only the files, so
   it needs nothing from git's index.
 - **Take the files of a move.** A student who is stuck runs
   `git restore --source BEFORE --staged -- :/ && git restore --source SHA --staged --worktree -- :/`. The first

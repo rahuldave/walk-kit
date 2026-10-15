@@ -83,7 +83,8 @@ it. The notes never copy the code of a file. A line `do$ COMMAND` gives the comm
 `patch$ PATH` says that the move changes `PATH` by its patch.
 
 A student who builds the project never commits. So write `rm` and `mv` on a `do$` line, not `git rm` and `git mv`. A
-`git rm` of a file that the walk changed fails, and so does a `git mv` of a file that the walk made.
+`git rm` of a file that the walk changed fails, and so does a `git mv` of a file that the walk made. `just check` names
+each `git rm` and `git mv` of a tutorial as a problem.
 
 `slides/slides.toml`, the manifest, says which slides show at each step. Once `slides.example.toml` gives every step
 a slide, rename it to `slides.toml`. Then take the `#` off the line `slides = "slides/slides.toml"` in `toc.toml`.
