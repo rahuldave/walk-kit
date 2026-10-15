@@ -8,6 +8,7 @@
     python3 walk_update.py ... --upstream owner        the project's owner, for the justfile (default: the one it names)
     python3 walk_update.py ... --replace-edited        make the files that walk-init wrote again, also those edited by hand
     python3 walk_update.py --project bla --toc toc.toml --walk ~/Projects/bla-walk    a class with several walks
+    python3 walk_update.py ... --toc toc.toml --repo ~/Projects/bla --pages-only      write only the pages to read, for just pages
 
 walk.md is the walk's preamble, then the class notes from their first `## ` heading on, without the
 private lines that `private.py` names. With --toc, the walk repository gets toc.toml as it is, each walk's notes
@@ -18,7 +19,7 @@ repository gets the new recipes. A file that matches no version of its template 
 unless --replace-edited is given. The script says so again before it asks to commit, with a change of the timewalk source
 and a class justfile that takes timewalk from elsewhere or still passes --discard-edits.
 
-It refuses a walk repository with changes that are not committed. It stages only the paths that it wrote, and its undo
+It refuses a walk repository with changes that are not committed, but for pages that render.py made. It stages only the paths that it wrote, and its undo
 command names only those paths.
 
 The script writes only into a walk repository. It refuses one that is the class folder, the project, or inside or
@@ -37,6 +38,9 @@ written or not, and stops before the commit if one has a private line. It also s
 line in fenced code that would be private outside it, unless --allow-cues-in-code says that each is code to show.
 
 The script never writes build/walk.pdf, the student's own PDF. It never pushes: it prints the command that does.
+
+--pages-only writes the pages that students read and nothing else, with the same checks, and commits nothing. A walk
+repository with changes that are not committed is then allowed, since a second run writes over its own pages.
 """
 
 import argparse
@@ -50,15 +54,26 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
-from common import GITHUB, HERE, TEMPLATES, TIMEWALK, UVX, TocError, fill, run, toc_walks, walk_text, yes
 import render
+from common import (
+    GITHUB,
+    HERE,
+    TEMPLATES,
+    TIMEWALK,
+    UVX,
+    TocError,
+    fill,
+    run,
+    toc_walks,
+    walk_text,
+    yes,
+)
 from private import MixedCue, in_code, private_lines, public, toml_cues
 from walk_init import FILES
 
 # What walk-init writes, and the folders that its .gitignore names: no path of toc.toml may take their place
 OWN = {Path(name).parts[0].casefold() for name in FILES if name != "walk.md"} | {"toc.toml", ".git", "site", "sites"} | {
     found.casefold() for found in re.findall(r"^/([^/\s]+)/$", (TEMPLATES / "walk" / "gitignore").read_text(encoding="utf-8"), re.MULTILINE)}
-SITE_TAKEN = {"read", "build", "site_libs"}  # folders of the first walk's built site: no other walk's site may have these ids
 WALK_MARK = "--replay worktree"  # a line of the walk template's justfile, and of no other justfile
 SOURCE = re.compile(r'^timewalk\s*:=\s*env\("TIMEWALK",\s*"([^"]*)"\)', re.MULTILINE)  # where a justfile takes timewalk from
 TOUCHED: list[Path] = []  # every path that target() let the script write, delete or make, in order
@@ -87,12 +102,15 @@ def main() -> int:  # The exit code
                         help="make a file that walk-init wrote and that was edited by hand again from the template (default: keep it)")
     parser.add_argument("--allow-cues-in-code", action="store_true",
                         help="go on when a line in fenced code would be private outside it: each such line is code for students")
+    parser.add_argument("--pages-only", action="store_true", help="write only the pages to read without timewalk, and commit nothing")
     args = parser.parse_args()
     walk = args.walk.expanduser().resolve()
     if bool(args.notes) == bool(args.toc):
         print("walk-update: give --notes, or --toc for a class with several walks", file=sys.stderr)
         return 2
     args.kept, args.notices = [], []
+    if args.pages_only:
+        return pages_only(args, walk)
     try:
         check_walk(args, walk)
         clean(walk)
@@ -126,6 +144,34 @@ def main() -> int:  # The exit code
     return finish(args, walk)
 
 
+def pages_only(
+    args: argparse.Namespace,  # The command line
+    walk: Path,  # The walk repository, resolved
+) -> int:  # The exit code
+    """Write the pages that students read into the walk repository, with the checks of a full update, and commit nothing."""
+    if not (args.toc and args.repo):
+        print("walk-update: --pages-only needs --toc and --repo", file=sys.stderr)
+        return 2
+    try:
+        check_walk(args, walk)
+        args.upstream = upstream_of(args, walk)
+        pages, stale = plan_pages(args, walk)
+        written = write_pages(walk, pages, stale)
+    except (Refused, TocError) as refused:
+        print(f"walk-update: {refused}", file=sys.stderr)
+        return 2
+    found, _ = leaks(written)
+    if found:
+        print(f"walk-update: these lines of the pages are private. {undo(walk)}", file=sys.stderr)
+        for place in found:
+            print(f"  {place}", file=sys.stderr)
+        return 2
+    for notice in args.notices:
+        print(f"walk-update: {notice}")
+    print(f"walk-update: the pages are in {walk}, not committed; just walk-update commits them")
+    return 0
+
+
 def undo(
     walk: Path,  # The walk repository
 ) -> str:  # The commands that put back, as committed, the paths that walk-update wrote, and no other
@@ -144,20 +190,31 @@ def undo(
 def clean(
     walk: Path,  # The walk repository
 ) -> None:
-    """Refuse a walk repository with changes that are not committed: walk-update would write over them, or commit them."""
-    status = subprocess.run(["git", "-C", str(walk), "status", "--porcelain", "-z"], capture_output=True, text=True, check=False)
+    """Refuse a walk repository with changes that are not committed: walk-update would write over them, or commit them. A
+    page that render.py made, as just pages leaves it, is not such a change: walk-update writes it again."""
+    status = subprocess.run(["git", "-C", str(walk), "status", "--porcelain", "-z", "--untracked-files=all"], capture_output=True, text=True,
+                            check=False)
     if status.returncode != 0:
         raise Refused(f"git cannot read the status of {walk}: {status.stderr.strip()}")
     entries, changed = status.stdout.split("\0"), []
     while entries:
         entry = entries.pop(0)
-        if len(entry) > 3:
+        if len(entry) > 3 and set(entry[:2]) & {"R", "C"} and entries:  # a rename or a copy: its old path comes next, with no status
+            entries.pop(0)
+        if len(entry) > 3 and not made_page(walk / entry[3:]):
             changed.append(entry[3:])
-            if entry[0] in "RC" and entries:  # a rename or a copy: its old path comes next, with no status
-                entries.pop(0)
     if changed:
         raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  "
                       + "\n  ".join(changed))
+
+
+def made_page(
+    path: Path,  # A file of the walk repository
+) -> bool:  # True if it is a page that render.py made, as a file and not a link
+    "Tell a page that render.py made from any other file."
+    if path.is_symlink() or not path.is_file():
+        return False
+    return render.MADE in path.read_text(encoding="utf-8", errors="replace")
 
 
 def class_notices(
@@ -491,45 +548,19 @@ def plan_pages(
         # Without a toc.toml the walks have no pages: those of an earlier run go. With one but no --repo, they stay as they are
         return {}, ([] if args.toc else old_pages(walk, {}))
     source = args.toc.expanduser().resolve()
-    url = f"https://github.com/{args.upstream}/{args.project}"
-    site = f"https://{args.upstream}.github.io/{args.project}-walk"
-    pages: dict[Path, str] = {}
-    listed, gaps, words = [], 0, 0
-    with tempfile.TemporaryDirectory() as scratch:
-        for number, entry in enumerate(render.page_walks(source)):
-            ident = entry["id"]
-            if number and ident in SITE_TAKEN:
-                raise Refused(f"walk {ident}: the first walk's site has a folder {ident}, so this walk's site cannot have that id. Give it another id")
-            out = Path(scratch) / f"{ident}.json"
-            done = subprocess.run([*UVX, args.timewalk, "timewalk-export", str(args.repo.expanduser().resolve()), "--toc", str(source),
-                                   "--walk", ident, "--json", str(out), "--github", url], capture_output=True, text=True, check=False)
-            if done.returncode:
-                raise Refused(f"timewalk-export --json failed for walk {ident}, so nothing is written:\n{done.stderr.strip()}")
-            facts = render.load(out)
-            if facts["errors"]:
-                raise Refused(f"timewalk-check finds errors in walk {ident}, so nothing is written. Run just check:\n  " + "\n  ".join(facts["errors"]))
-            if facts["walk"]["kind"] == "tutorial":
-                gaps += len(render.source_gaps(facts))
-            words += len(render.our_words(facts))
-            for name, text in render.markdown_files(facts).items():
-                pages[walk / "walks" / ident / name] = text
-            folder = walk / "site" if not number else walk / "sites" / ident
-            for name, text in render.site_files(facts).items():
-                pages[folder / name] = text
-            ways = [render.WAYS[mode] for mode in render.ways(facts)]
-            on_github = ", ".join(f"[{name}]({ident}/{file}.md)" for name, file, _ in ways)   # from walks/README.md
-            listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
-    pages[walk / "walks" / "README.md"] = "\n".join([
-        f"<!-- {render.MADE} -->", "", f"# The walks through {args.project}", "",
-        ("Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
-         "gives every command to run and every change to make by hand. A narrative has the first alone."), "", *listed, ""])
+    try:
+        rendered, gaps, words = render.class_pages(source, args.repo.expanduser().resolve(), f"https://github.com/{args.upstream}/{args.project}",
+                                                   args.timewalk)
+    except render.PagesError as error:
+        raise Refused(f"{error}\nNothing is written.") from error
+    pages = {walk / name: text for name, text in rendered.items()}
     if gaps or words:
         places = "1 place" if words == 1 else f"{words} places"
         unrun = " The do$ lines did not run, so Build it yourself cannot say which files they make." if gaps else ""
         args.notices.append(f"the pages have {places} with timewalk's words.{unrun} just check lists them")
     copied = {(walk / found[key]).resolve() for found in toc_walks(source) for key in ("notes", "intro", "shared") if found[key]}
     copied |= {(walk / Path(found["slides"]).parent).resolve() for found in toc_walks(source) if found["slides"]}
-    for path, text in pages.items():
+    for path in pages:
         target(walk, path, record=False)
         if any(path.resolve() == other or within(path.resolve(), other) for other in copied):
             raise Refused(f"{path.relative_to(walk)} is a page to read without timewalk, and toc.toml names it for a walk's notes, intro or "
@@ -548,7 +579,7 @@ def old_pages(
 ) -> list[Path]:  # The pages that an earlier run wrote, which the walks no longer have
     """Find render.py's own pages that this run does not write: each says in its first line that render.py made it."""
     stale = []
-    for pattern in ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*.css", "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css"):
+    for pattern in render.PAGE_GLOBS:
         for old in sorted(walk.glob(pattern)):
             if old not in pages and old.is_file() and not old.is_symlink() and render.MADE in old.read_text(encoding="utf-8", errors="replace"):
                 stale.append(target(walk, old, record=False))

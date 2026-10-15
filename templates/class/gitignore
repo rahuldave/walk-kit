@@ -3,4 +3,6 @@
 # Python and the operating system
 __pycache__/
 .DS_Store
-/review-findings/
+# The reports of the model's reviews, written again at each run. Other reports in reports/ stay tracked
+/reports/writing/
+/reports/follow/

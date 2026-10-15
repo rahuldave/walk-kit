@@ -58,17 +58,18 @@ and walk repositories, and the commit and tag messages that become notes.
 2. Run the checker, `style/check.py`, and fix every hard problem. The checker looks only at form, for example
    the number of words in a sentence. It does not judge whether a reader can follow the text.
 3. Have the writing reviewed by `scripts/review.py`. A fresh model reads the text that changed since the last
-   commit, with the reviewer's prompt in `style/REVIEW.md`, and reports where a reader would stumble. Fix what is
-   real. Each round adds its findings to the file's report in `review-findings/`. Under each finding that you fix,
+   commit, with the reviewer's prompt in `review/writing.md`, and reports where a reader would stumble. Fix what is
+   real. Each round adds its findings to the file's report in `reports/writing/`. Under each finding that you fix,
    write a line `- Fixed: ...`. The third round since the last commit passes, and leaves the other findings for the
    owner to judge. More rounds make the prose stiff, so rewrite by hand instead.
-4. Do both before you show the work, and before you ask to commit. In a class folder, `just style` runs both.
-   Outside one, run them yourself:
+4. Do both before you show the work, and before you ask to commit. In a class folder, `just style` runs both on
+   the README, the notes, the intros and the slides, which readers see. It skips `AGENTS.md` and `CLAUDE.md`,
+   which are for agents. Check their form alone. Outside a class, run them yourself:
 
    ```
    python3 SKILL_DIR/style/check.py README.md AGENTS.md
    python3 SKILL_DIR/style/check.py -v README.md     # also the soft notes: fix those where a rule applies
-   python3 SKILL_DIR/scripts/review.py README.md AGENTS.md --repo ~/Projects/bla   # --repo: the reviewer may read the project
+   python3 SKILL_DIR/scripts/review.py README.md --repo ~/Projects/bla   # --repo: the reviewer may read the project
    ```
 
 5. A commit message or a tag message is not a file. Write it to a file in a temporary folder, and check that file
@@ -78,6 +79,19 @@ and walk repositories, and the commit and tag messages that become notes.
 `$ just setup` or `runs$ uv run train`, stays as the reader types it. A line `time: m:ss` stays. The checker skips
 code, in a fence or inline. It checks the words of each item under `files:` as prose, because the pages show them
 under What changed. README.md says how a class made before `just style` gets the recipe.
+
+## Pages, follow and the reviews
+
+- `just pages` renders the pages that students read, for every walk of `toc.toml`, into the walk repository, or into
+  `build/pages` without one. It runs `walk_update.py --pages-only` or `render.py --pages`, and commits nothing.
+- `just follow` runs `scripts/follow.py` on each `walks/ID/build.md`. It runs every command of the page in order,
+  in a scratch clone. Only a `git check` that prints something or fails is a failure. With Claude Code, `--check-output` adds
+  one model call with the page and the log, prompt `review/output.md`, report `reports/follow/ID-build.md`, written
+  again at each run. A finding fails it, and there are no rounds. The log is `build/follow/ID.md`.
+- The writing review, `scripts/review.py`, uses the prompt `review/writing.md`, and reviews the files at the same
+  time. Its reports are in `reports/writing/`. A file fails at most 3 rounds between two commits.
+- In walk-kit itself, `just test` follows the Build it yourself pages of timewalk-test, and `just style` checks
+  `README.md` and `templates/walk/README.md`.
 
 ## Tasks
 
@@ -89,7 +103,7 @@ under What changed. README.md says how a class made before `just style` gets the
 
    It writes `notes.md` with one section for each step tag, and `slides/slides.example.toml`. Rename that file
    to `slides.toml` once it has a line for every step. A manifest that misses a step is an error. `--toc` also writes
-   `toc.toml`, for a class with several walks. It also writes the justfile, a `.gitignore` for `build/`,
+   `toc.toml`, for a class with several walks. It also writes the justfile, a `.gitignore` for `build/`, `reports/writing/` and `reports/follow/`,
    `README.md`, and `AGENTS.md` with a `CLAUDE.md` that reads it.
    It commits, then asks before it creates the private repository `OWNER/bla-class`.
 

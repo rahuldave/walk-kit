@@ -767,10 +767,31 @@ Where each file of a move comes from is `timewalk-check`'s to judge. See
 `just walk-update` runs the checks of the pages too, and says how many it finds. It writes the pages all the same.
 `just check` lists each problem.
 
+### Make the pages, and follow them
+
+`just pages` writes the pages alone, and commits nothing. With a walk repository, it writes into it, through
+`walk_update.py --pages-only`, with the same checks as `just walk-update`, and a later `just walk-update` commits them.
+Without one, `render.py --pages build/pages` writes the same layout into the class folder. It then runs only the
+checks of `render.py`, and no check for private lines. Run `just walk-update` before the pages go to students.
+
+`just follow` makes the pages, and then follows each Build it yourself page with `scripts/follow.py`. It clones the
+project into a scratch folder and runs every command of the page in order. A `curl` of a diff on GitHub becomes the
+same `git diff` in the local project. A command that fails is logged, not counted. Only a `git check` that prints
+something, or fails, is a failure. The catch-up command after a check, `git restore --source ... --staged ...`, runs
+only after that check fails. follow counts the `git check` lines of the page, and fails if it ran another number of
+checks, or if the page has none. The log is `build/follow/ID.md`. A class without `toc.toml` has no pages, and
+`just follow` says that it has nothing to follow.
+
+With Claude Code installed, follow also makes one call to a model with the page and the log, with the prompt in
+`review/output.md`. The model reports each output, number or claim of the text that the log does not show. The
+report is `reports/follow/ID-build.md`, and each run writes it again. A finding fails the recipe. Fix the notes, and
+run it again.
+
 ### A class made before the pages
 
 `just walk-update` writes the files of the walk repository, and never the justfile of the class. So the `check`
-recipe of an older class does not check the pages. To add the checks, copy the last lines of the recipe `check`
+recipe of an older class does not check the pages, and the class has no recipes `pages` and `follow`. Copy those
+recipes from the template too. To add the checks, copy the last lines of the recipe `check`
 from `templates/class/justfile` into the class's `justfile`. These lines start at the comment about the pages
 that students read.
 

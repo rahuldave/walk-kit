@@ -1,6 +1,6 @@
 # The class material for @project@: the notes with your private cues, the slides, and the recipes that use
-# them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind style, walk-init,
-# walk-update and check-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
+# them. Run `just` to see the list, and `just setup` first on a new machine. The scripts behind style, pages, follow,
+# walk-init, walk-update and check-pdf are the walk skill's: https://github.com/rahuldave/walk-kit
 #
 # The project and the walk repository are found beside this folder, as ../@project@ and ../@project@-walk,
 # unless PROJECT_DIR and WALK_DIR name other folders. WALK_SKILL names the skill, if it is not in ~/.agents/skills.
@@ -87,14 +87,55 @@ check:
         TIMEWALK={{ quote(timewalk) }} python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}"
     fi
 
-# Check the prose of the class against the walk skill's writing guide: its form, then a review of its language by a model.
-# The skill's scripts/style.py says which files. -v also shows the soft notes
+# Check the README, notes and slides against the writing guide: their form, then a review by a model. -v shows the soft notes
 style *args:
     #!/usr/bin/env bash
     set -euo pipefail
     skill={{ quote(skill) }}
     test -f "$skill/scripts/style.py" || { echo "style: the walk skill is not installed; just setup says how" >&2; exit 1; }
     python3 "$skill/scripts/style.py" --class . --repo {{ quote(repo) }} "$@"
+
+# Render the pages that students read, for every walk of toc.toml: into @project@-walk if it exists, or else into build/pages
+pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    skill={{ quote(skill) }} walk={{ quote(walk) }}
+    test -f "$skill/scripts/render.py" || { echo "pages: the walk skill is not installed; just setup says how" >&2; exit 1; }
+    test -f toc.toml || { echo "pages: the pages need a toc.toml, and this class has none" >&2; exit 1; }
+    export TIMEWALK={{ quote(timewalk) }}
+    if [ -d "$walk/.git" ]; then
+        python3 "$skill/scripts/walk_update.py" --project "{{ project }}" --upstream "{{ upstream }}" --toc toc.toml --walk "$walk" \
+            --repo {{ quote(repo) }} --pages-only
+    else
+        python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}" --pages build/pages
+    fi
+
+# Follow every Build it yourself page in a scratch clone, as a student would: every git check must pass. Logs go to build/follow
+follow:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f toc.toml ]; then echo "follow: this class has no toc.toml, so it has no pages to follow"; exit 0; fi
+    just --justfile {{ quote(justfile()) }} pages
+    skill={{ quote(skill) }} walk={{ quote(walk) }}
+    out=build/pages
+    if [ -d "$walk/.git" ]; then out="$walk"; fi
+    # With Claude Code, a model also checks the text against the output, into reports/follow/
+    check=()
+    if command -v claude > /dev/null; then check=(--check-output --report-dir .); fi
+    scratch=$(mktemp -d)
+    trap 'rm -rf "$scratch"' EXIT
+    shopt -s nullglob
+    pages=("$out"/walks/*/build.md)
+    if [ ${#pages[@]} -eq 0 ]; then echo "follow: no walk is a tutorial, so there is no Build it yourself page"; exit 0; fi
+    mkdir -p build/follow
+    failed=0
+    for page in "${pages[@]}"; do
+        id=$(basename "$(dirname "$page")")
+        echo "follow: walk $id"
+        python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/$id" --log "build/follow/$id.md" \
+            ${check[@]+"${check[@]}"} || failed=1
+    done
+    exit "$failed"
 
 # Draft the notes of a tutorial's moves from their commits: just draft ID prints them, just draft ID --write adds them
 draft id *args:

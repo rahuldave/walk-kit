@@ -3,6 +3,7 @@
     python3 render.py FACTS.json --markdown walks/ID --site site      write the pages of one walk
     python3 render.py FACTS.json --check                              check the walk's text, and write nothing
     python3 render.py --class . --repo ../bla --github URL            check every walk of a class, for just check
+    python3 render.py --class . --repo ../bla --github URL --pages DIR    write the pages of every walk of a class, for just pages
 
 A tutorial has two ways of reading, from one set of facts. **Read the tutorial** explains each change, with the code to
 look at: it is timewalk's watch mode. **Build it yourself** gives every command to run and every change to make by
@@ -21,6 +22,9 @@ learns it once. The renderer's own words never name timewalk's steps, moves or c
 smalldocs: `index.qmd`, which explains the two ways, a page for each part in `read/` and `build/`, `_smalldocs.yml` and
 `styles.css`. Every file it writes says so in its first line, and it writes over only such files, and removes its own
 pages that the walk no longer has. The same facts give the same bytes.
+
+`--pages DIR` writes the pages of every walk of a class into DIR as walk-update lays them out in the walk repository:
+`walks/ID/` for the Markdown, `site/` for the first walk's website and `sites/ID/` for the others, and `walks/README.md`.
 
 `--check` reports facts made without running the do$ lines, and the words of timewalk in the text that a reader sees. `--class` does the same for every walk that gets pages, with the facts from timewalk, and
 also checks the rendered pages against the writing guide. The exit code is 1 if it finds a problem. `walk_update.py`
@@ -55,6 +59,9 @@ LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lo
 OUR_WORDS = re.compile(r"\b(?i:steps?|commits?)\b|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")   # Start inside a sentence, bare, bold or in brackets; "Start the server" is a verb
 CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
+SITE_TAKEN = {"read", "build", "site_libs"}  # folders of the first walk's built site: no other walk's site may have these ids
+PAGE_GLOBS = ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*.css",
+              "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, for a later run to remove
 
 
 def slug(
@@ -623,6 +630,66 @@ def page_walks(
     return chosen
 
 
+class PagesError(Exception):
+    """A walk whose pages cannot be made, with the reason."""
+
+
+def export(
+    repo: Path,  # The project
+    toc: Path,  # The class's toc.toml
+    ident: str,  # The id of a walk
+    github: str,  # The project on GitHub, https://github.com/OWNER/NAME
+    scratch: Path,  # A folder for the facts file
+    timewalk: str | None = None,  # Where timewalk comes from (default: common.TIMEWALK)
+) -> dict:  # The facts of the walk
+    """Get the facts of one walk from timewalk-export --json."""
+    from common import TIMEWALK, UVX
+
+    out = scratch / f"{ident}.json"
+    done = subprocess.run([*UVX, timewalk or TIMEWALK, "timewalk-export", str(repo), "--toc", str(toc), "--walk", ident, "--json", str(out),
+                           "--github", github], capture_output=True, text=True, check=False)
+    if done.returncode:
+        raise PagesError(f"timewalk-export --json failed for walk {ident}:\n{done.stderr.strip()}")
+    return load(out)
+
+
+def class_pages(
+    toc: Path,  # The class's toc.toml
+    repo: Path,  # The project
+    github: str,  # The project on GitHub, https://github.com/OWNER/NAME
+    timewalk: str | None = None,  # Where timewalk comes from (default: common.TIMEWALK)
+) -> tuple[dict[str, str], int, int]:  # Each page by its path in the walk repository; the walks whose do$ lines did not run; the places with timewalk's words
+    """Render the pages of every walk of a class that gets pages, as the walk repository holds them. walk-update and --pages
+    both write them. It raises PagesError for a walk that timewalk cannot export, or that has errors."""
+    owner, project = github.rstrip("/").removesuffix(".git").split("/")[-2:]
+    site = f"https://{owner}.github.io/{project}-walk"
+    pages: dict[str, str] = {}
+    listed, gaps, words = [], 0, 0
+    with tempfile.TemporaryDirectory() as scratch:
+        for number, entry in enumerate(page_walks(toc)):
+            ident = entry["id"]
+            if number and ident in SITE_TAKEN:
+                raise PagesError(f"walk {ident}: the first walk's site has a folder {ident}, so this walk's site cannot have that id. Give it another id")
+            facts = export(repo, toc, ident, github, Path(scratch), timewalk)
+            if facts["errors"]:
+                raise PagesError(f"timewalk-check finds errors in walk {ident}. Run just check:\n  " + "\n  ".join(facts["errors"]))
+            if facts["walk"]["kind"] == "tutorial":
+                gaps += len(source_gaps(facts))
+            words += len(our_words(facts))
+            for name, text in markdown_files(facts).items():
+                pages[f"walks/{ident}/{name}"] = text
+            folder = "site" if not number else f"sites/{ident}"
+            for name, text in site_files(facts).items():
+                pages[f"{folder}/{name}"] = text
+            on_github = ", ".join(f"[{WAYS[mode][0]}]({ident}/{WAYS[mode][1]}.md)" for mode in ways(facts))   # from walks/README.md
+            listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
+    pages["walks/README.md"] = "\n".join([
+        f"<!-- {MADE} -->", "", f"# The walks through {project}", "",
+        ("Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
+         "gives every command to run and every change to make by hand. A narrative has the first alone."), "", *listed, ""])
+    return pages, gaps, words
+
+
 def check_class(
     folder: Path,  # The class folder, with toc.toml
     repo: Path,  # The project
@@ -630,21 +697,17 @@ def check_class(
 ) -> int:  # The number of problems
     """Check every walk that gets pages: Build it yourself gives every file, no reader sees timewalk's words, and the
     rendered pages follow the writing guide."""
-    from common import TIMEWALK, UVX
-
     from style import blank, checker
 
     check, problems = checker().check, 0
     with tempfile.TemporaryDirectory() as scratch:
         for entry in page_walks(folder / "toc.toml"):
-            out = Path(scratch) / f"{entry['id']}.json"
-            done = subprocess.run([*UVX, TIMEWALK, "timewalk-export", str(repo), "--toc", str(folder / "toc.toml"), "--walk", entry["id"],
-                                   "--json", str(out), "--github", github], capture_output=True, text=True, check=False)
-            if done.returncode:
-                print(f"walk {entry['id']}: timewalk-export --json failed: {done.stderr.strip()}")
+            try:
+                facts = export(repo, folder / "toc.toml", entry["id"], github, Path(scratch))
+            except PagesError as error:
+                print(f"walk {entry['id']}: {error}")
                 problems += 1
                 continue
-            facts = load(out)
             found = source_gaps(facts) if facts["walk"]["kind"] == "tutorial" else []
             for name, text in markdown_files(facts).items():
                 page = Path(scratch) / "page.md"
@@ -714,12 +777,24 @@ def main() -> int:  # The exit code
     parser.add_argument("--class", dest="folder", type=Path, help="check every walk of this class folder, in place of FACTS")
     parser.add_argument("--repo", type=Path, help="with --class: the project")
     parser.add_argument("--github", help="with --class: the project on GitHub, https://github.com/OWNER/NAME")
+    parser.add_argument("--pages", type=Path, help="with --class: write the pages of every walk into this folder, and check nothing")
     args = parser.parse_args()
     if args.folder:
         if not (args.repo and args.github):
             parser.error("--class needs --repo and --github")
         if not (args.folder / "toc.toml").is_file():
             print("render: the pages need a toc.toml, and this class has none, so there is nothing to check")
+            return 0
+        if args.pages:
+            try:
+                pages, gaps, words = class_pages(args.folder.resolve() / "toc.toml", args.repo.expanduser().resolve(), args.github)
+            except PagesError as error:
+                print(f"render: {error}", file=sys.stderr)
+                return 1
+            done = write([(args.pages, pages, list(PAGE_GLOBS))])
+            print("\n".join(f"  {path}" for path in done) or "  nothing changed")
+            if gaps or words:
+                print(f"render: the pages have {words} places with timewalk's words, and {gaps} walks whose do$ lines did not run; just check lists them")
             return 0
         return 1 if check_class(args.folder.resolve(), args.repo.expanduser().resolve(), args.github) else 0
     if not args.facts:

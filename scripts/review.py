@@ -8,18 +8,19 @@
 
 style/check.py checks the form of the text: the length of a sentence, a vague word, a colon between clauses. It
 cannot judge whether a reader can follow the text. This script asks a model, through `claude -p`, headless. The
-model gets style/REVIEW.md (the reviewer's prompt, the same for every class), the guide, the glossary and the
+model gets review/writing.md (the reviewer's prompt, the same for every class), the guide, the glossary and the
 text. It may read the class folder, walk-kit, and the project, and nothing else. It returns each sentence that a
 reader of 12 cannot follow, or that is wrong, with a rewrite. A text that passed is kept in a cache, so a second
-run of the same text costs nothing.
+run of the same text costs nothing. The files are reviewed at the same time, and their results print in order.
 
 A file is reviewed at most 3 times between two commits. Each review adds its findings to the file's report in
-review-findings/ at the top of the class folder, at the file's path with .md added. The author writes `- Fixed: ...`
+reports/writing/ at the top of the class folder, at the file's path with .md added. The author writes `- Fixed: ...`
 under each finding that the author fixed. A finding left without one is for the owner of the class. The first two
 reviews fail on a finding. The third passes, and the file is not reviewed again until the next commit.
 """
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import shutil
@@ -31,11 +32,13 @@ from style import prose_files
 
 KIT = Path(__file__).resolve().parent.parent
 STYLE = KIT / "style"
+PROMPT = KIT / "review" / "writing.md"  # the reviewer's prompt
 CACHE = Path.home() / ".cache" / "walk-kit" / "style-review"
 MODEL = "opus"
 TOOLS = "Read,Grep,Glob"
 ROUNDS = 3  # the review of a file fails at most this many times between two commits; then its findings go to a shadow file
-FINDINGS = "review-findings"  # the folder of the shadow files, at the top of the class folder; a class ignores it in git
+FINDINGS = Path("reports") / "writing"  # the folder of the shadow files, at the top of the class folder; a class ignores reports/writing/ in git
+WORKERS = 8  # the reviews that run at the same time
 
 SCHEMA = {
     "type": "object",
@@ -76,12 +79,16 @@ def text_of(
     return f"--- {path} (the whole file) ---\n" + path.read_text(encoding="utf-8")
 
 
+class ReviewFailed(Exception):
+    """The model gave no review of a file: claude failed, or gave no verdict."""
+
+
 def review(
     text: str,  # The text to review, from text_of
     folders: list[Path],  # The folders that the reviewer may read
 ) -> dict:  # The verdict and the findings
     "Ask the model for a review of the text, or take a pass from the cache."
-    ask = "\n\n".join([(STYLE / "REVIEW.md").read_text(encoding="utf-8"),
+    ask = "\n\n".join([PROMPT.read_text(encoding="utf-8"),
                        "=== WRITING GUIDE ===\n" + (STYLE / "GUIDE.md").read_text(encoding="utf-8"),
                        "=== GLOSSARY ===\n" + (STYLE / "README.md").read_text(encoding="utf-8"),
                        "=== TEXT TO REVIEW ===\n" + text])
@@ -93,12 +100,18 @@ def review(
                "--json-schema", json.dumps(SCHEMA)]
     for folder in folders[1:]:
         command += ["--add-dir", str(folder)]
-    done = subprocess.run(command, input=ask, capture_output=True, text=True, cwd=folders[0], check=False)
+    try:
+        done = subprocess.run(command, input=ask, capture_output=True, text=True, cwd=folders[0], check=False)
+    except OSError as error:
+        raise ReviewFailed(f"claude did not start: {error}") from error
     if done.returncode:
-        raise SystemExit(f"review: claude failed: {(done.stderr or done.stdout).strip()[-500:]}")
-    found = json.loads(done.stdout).get("structured_output")
-    if not isinstance(found, dict) or "verdict" not in found:
-        raise SystemExit(f"review: claude gave no verdict: {done.stdout[-500:]}")
+        raise ReviewFailed(f"claude failed: {(done.stderr or done.stdout).strip()[-500:]}")
+    try:
+        found = json.loads(done.stdout).get("structured_output")
+    except (json.JSONDecodeError, AttributeError):
+        found = None
+    if not isinstance(found, dict) or "verdict" not in found or not isinstance(found.get("findings"), list):
+        raise ReviewFailed(f"claude gave no verdict: {done.stdout[-500:]}")
     if found["verdict"] == "pass" and not found["findings"]:   # only a pass is kept: a failed text is reviewed again
         CACHE.mkdir(parents=True, exist_ok=True)
         kept.write_text(json.dumps(found))
@@ -108,7 +121,7 @@ def review(
 def shadow(
     path: Path,  # A reviewed file
     folder: Path,  # The class folder
-) -> Path:  # Its shadow file in review-findings, at the same path with .md added
+) -> Path:  # Its shadow file in reports/writing, at the same path with .md added
     "Name the shadow file of a reviewed file."
     name = str(path.relative_to(folder)) if path.is_relative_to(folder) else str(path).lstrip("/")
     return folder / FINDINGS / f"{name}.md"
@@ -155,41 +168,54 @@ def keep(
                     encoding="utf-8")
 
 
+def one(
+    path: Path,  # A file to review
+    whole: bool,  # True to review it whole, False for its change since the last commit
+    folders: list[Path],  # The folders that the reviewer may read, the first one its working folder
+) -> tuple[str, int, bool]:  # What to print for the file, the number of findings that fail it, and True if the review failed
+    "Review one file, keep its findings in its report, and say its result. A review that failed records no round."
+    kept = shadow(path, folders[0])
+    number = round_of(path, kept)
+    if number > ROUNDS:   # its findings wait in its shadow file for a person, until the next commit
+        return f"{path}: round {ROUNDS} of the review is done; its findings are in {kept}", 0, False
+    try:
+        text = text_of(path, whole)
+        if text is None:   # no change since the last commit
+            return "", 0, False
+        found = review(text, folders)
+    except (ReviewFailed, OSError, subprocess.CalledProcessError) as error:
+        return f"{path}: FAIL (no review: {error})", 0, True
+    if not found["findings"]:   # a pass is not a round: the next change is reviewed again
+        return f"{path}: pass (review)", 0, False
+    keep(path, kept, number, found["findings"])
+    if number == ROUNDS:   # the last round: the findings go to a person, and the check passes
+        return f"{path}: round {ROUNDS} of the review, {len(found['findings'])} findings left in {kept}", 0, False
+    lines = [f"{finding['file']}: \"{finding['quote']}\"\n  problem: {finding['problem']}\n  rewrite: {finding['rewrite']}\n"
+             for finding in found["findings"]]
+    return "\n".join([*lines, f"{path}: FAIL (review, round {number} of {ROUNDS})"]), len(lines), False
+
+
 def run(
     files: list[Path],  # The files to review
     whole: bool,  # True to review them whole, False for their changes since the last commit
     folders: list[Path],  # The folders that the reviewer may read, the first one its working folder
-) -> int:  # The number of findings
-    "Review each file, print each finding and the file's result, and count the findings."
+) -> tuple[int, list[Path]]:  # The number of findings, and the files whose review failed
+    "Review the files at the same time, print each file's findings and result in the order of the list, and count the findings."
     if files and not shutil.which("claude"):
         print("review: skipped, because claude (Claude Code) is not installed")
-        return 0
-    count = 0
-    for path in files:
-        kept = shadow(path, folders[0])
-        number = round_of(path, kept)
-        if number > ROUNDS:   # its findings wait in its shadow file for a person, until the next commit
-            print(f"{path}: round {ROUNDS} of the review is done; its findings are in {kept}")
-            continue
-        text = text_of(path, whole)
-        if text is None:   # no change since the last commit
-            continue
-        found = review(text, folders)
-        if not found["findings"]:   # a pass is not a round: the next change is reviewed again
-            print(f"{path}: pass (review)")
-            continue
-        keep(path, kept, number, found["findings"])
-        if number == ROUNDS:   # the last round: the findings go to a person, and the check passes
-            print(f"{path}: round {ROUNDS} of the review, {len(found['findings'])} findings left in {kept}")
-            continue
-        for finding in found["findings"]:
-            count += 1
-            print(f"{finding['file']}: \"{finding['quote']}\"\n  problem: {finding['problem']}\n  rewrite: {finding['rewrite']}\n")
-        print(f"{path}: FAIL (review, round {number} of {ROUNDS})")
-    return count
+        return 0, []
+    count, failed = 0, []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for path, (said, found, broke) in zip(files, pool.map(lambda path: one(path, whole, folders), files)):
+            if said:
+                print(said, flush=True)
+            count += found
+            if broke:
+                failed.append(path)
+    return count, failed
 
 
-def main() -> int:  # The exit code: 1 if there is a finding
+def main() -> int:  # The exit code: 1 if there is a finding, or a review failed
     """Review the changed prose of a class, or the given files."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--class", dest="folder", type=Path, default=Path("."), help="the class folder (default: this folder)")
@@ -200,10 +226,12 @@ def main() -> int:  # The exit code: 1 if there is a finding
     folder = args.folder.expanduser().resolve()
     files = [path.resolve() for path in args.files] if args.files else prose_files(folder)[0]
     folders = [folder, KIT] + ([args.repo.expanduser().resolve()] if args.repo else [])
-    count = run(files, args.all, folders)
+    count, failed = run(files, args.all, folders)
     if count:
         print(f"review: {count} findings", file=sys.stderr)
-    return 1 if count else 0
+    for path in failed:
+        print(f"review: the review of {path} failed", file=sys.stderr)
+    return 1 if count or failed else 0
 
 
 if __name__ == "__main__":

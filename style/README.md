@@ -44,8 +44,8 @@ python3 style/check.py README.md SKILL.md WALKS.md AGENTS.md style/README.md tem
 python3 style/check.py -v SKILL.md       # also show the soft notes, for a person to judge
 ```
 
-In a class folder, `just style` runs `scripts/style.py`, which names the files of the class and runs this checker
-on them.
+In a class folder, `just style` runs `scripts/style.py`, which runs this checker on the files of the class. The
+files are the README, the notes, the intros and the slides.
 
 The checker reads prose, and skips code, tables and quoted words. `SKILL.md`, in "Write by the guide", lists
 the forms of the notes that `just style` leaves out.

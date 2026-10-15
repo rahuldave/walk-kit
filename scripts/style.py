@@ -8,11 +8,13 @@
 
 style/check.py checks the mechanical rules of the guide: the length of a sentence, a colon, a contraction, a dash. It
 is not a review of the writing. When the form passes, review.py asks a model to review the text that changed since the
-last commit, for a reader of 12, with the reviewer's prompt in style/REVIEW.md. A finding fails the check too.
+last commit, for a reader of 12, with the reviewer's prompt in review/writing.md. A finding fails the check too.
 
-The script checks the prose of the class, and nothing else of its folder: README.md, AGENTS.md and CLAUDE.md, the
-notes of every walk, and the Markdown files that the slides manifest of each walk names. The walks are those of
-toc.toml, or else notes.md with slides/slides.toml. This docstring is the one place that says which files are checked.
+The script checks the prose that people outside the class's authors read, and nothing else of its folder: README.md,
+the notes and intro of every walk, and the Markdown files that the slides manifest of each walk names. The walks are
+those of toc.toml, or else notes.md with slides/slides.toml. AGENTS.md and CLAUDE.md are for agents, and are not
+checked. Rendered pages are checked when they are given as files. This docstring is the one place that says which
+files are checked.
 
 The checker reads a copy of each file in which the forms that the notes own are blank lines, so each line keeps its
 number. Those forms are a command line, such as `$ just setup` or `runs$ uv run train`, and a line `time: m:ss`. The
@@ -80,8 +82,8 @@ def manifest_files(
 def prose_files(
     folder: Path,  # The class folder
 ) -> tuple[list[Path], list[str], list[str]]:  # The files to check, the errors, and the notes for the user
-    """Find the prose of a class: its README, AGENTS.md and CLAUDE.md, the notes and intro of every walk, and the slides."""
-    files = [folder / name for name in ("README.md", "AGENTS.md", "CLAUDE.md")]
+    """Find the prose of a class that its readers see: its README, the notes and intro of every walk, and the slides."""
+    files = [folder / "README.md"]
     notes, manifests, problems, warnings = [], [], [], []   # notes: (what it is, its path)
     toc = folder / "toc.toml"
     if toc.is_file():
@@ -138,7 +140,7 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
     for problem in problems + warnings:
         print(f"style: {problem}", file=sys.stderr)
     if not files:
-        print(f"style: {folder} has no prose to check: no README.md, AGENTS.md, notes or slides", file=sys.stderr)
+        print(f"style: {folder} has no prose to check: no README.md, notes or slides", file=sys.stderr)
         return 2
     check, failed = checker().check, False
     with tempfile.TemporaryDirectory() as scratch:
@@ -162,7 +164,10 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
         return 1
     from review import KIT, run  # here: review.py imports this module
 
-    return 1 if run(files, False, [folder, KIT] + ([args.repo.expanduser().resolve()] if args.repo else [])) else 0
+    count, broke = run(files, False, [folder, KIT] + ([args.repo.expanduser().resolve()] if args.repo else []))
+    for path in broke:
+        print(f"style: the review of {path} failed", file=sys.stderr)
+    return 1 if count or broke else 0
 
 
 if __name__ == "__main__":

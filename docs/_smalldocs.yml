@@ -1,0 +1,36 @@
+# The website of walk-kit, for teachers. Build it with `just docs`. The workflow .github/workflows/docs.yml
+# publishes it on GitHub Pages on each push to main that changes docs/.
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: walk-kit
+  description: A class from the history of a project, with timewalk
+  site-url: https://rahuldave.com/walk-kit/
+  repo-url: https://github.com/rahuldave/walk-kit
+  page-navigation: true
+  search: true
+  navbar:
+    tools:
+      - icon: github
+        href: https://github.com/rahuldave/walk-kit
+  sidebar:
+    style: docked
+    contents:
+      - index.md
+      - repositories.md
+      - make-a-class.md
+      - student-pages.md
+      - check.md
+      - recipes.md
+  page-footer:
+    left: "walk-kit is MIT-licensed."
+    right: "Built with [smalldocs](https://rahuldave.com/smalldocs/)."
+
+theme:
+  light: cosmo
+  dark: darkly
+toc: true
+code-copy: true
+from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics

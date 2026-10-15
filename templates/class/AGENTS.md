@@ -14,6 +14,7 @@ repository for students is `../@project@-walk`. `just setup` clones them there i
 | `walks/ID/` | Only in a class with several walks: the `notes.md` and `slides/` of each walk after the first |
 | `justfile` | The recipes. `just` lists them |
 | `build/` | What the recipes make. Git ignores it |
+| `reports/` | The reviews of a model are in `reports/writing/` and `reports/follow/`, which git ignores. Other reports in `reports/` are tracked |
 
 ## The rules of the notes
 
@@ -47,6 +48,8 @@ narrative and a tutorial need, and the rules of `just setup`.
 | `just present` | Opens the walk on the project, with these notes and slides and the clock. `just present ID` opens another walk of `toc.toml` |
 | `just check` | Checks the notes and the slides of every walk against the steps, and a tutorial's moves. With `toc.toml`, it then checks the pages that students read |
 | `just style` | Checks the prose of the class against the writing guide of the walk skill. Its `scripts/style.py` names the files |
+| `just pages` | Makes the pages that students read, for every walk of `toc.toml`, in `@project@-walk`, or in `build/pages` without it. Commits nothing |
+| `just follow` | Follows each Build it yourself page in a scratch clone, as a student would. Every `git check` must pass. With Claude Code, a model also checks the text against the output, into `reports/follow/` |
 | `just draft ID` | Drafts the notes of the moves of a tutorial from its commits. `just draft ID --write` adds them to its notes |
 | `just pdf` | Makes `build/@project@.pdf`, the slides, one page each, for you and for the students. The notes are not in it. `just pdf ID` makes the PDF of another walk |
 | `just check-pdf` | Checks that no slide is cut off in that PDF |
