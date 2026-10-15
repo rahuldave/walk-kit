@@ -87,13 +87,14 @@ check:
         TIMEWALK={{ quote(timewalk) }} python3 "$skill/scripts/render.py" --class . --repo {{ quote(repo) }} --github "https://github.com/{{ upstream }}/{{ project }}"
     fi
 
-# Check the prose of the class against the walk skill's writing guide. The skill's scripts/style.py says which files. -v also shows the soft notes
+# Check the prose of the class against the walk skill's writing guide: its form, then a review of its language by a model.
+# The skill's scripts/style.py says which files. -v also shows the soft notes
 style *args:
     #!/usr/bin/env bash
     set -euo pipefail
     skill={{ quote(skill) }}
     test -f "$skill/scripts/style.py" || { echo "style: the walk skill is not installed; just setup says how" >&2; exit 1; }
-    python3 "$skill/scripts/style.py" --class . "$@"
+    python3 "$skill/scripts/style.py" --class . --repo {{ quote(repo) }} "$@"
 
 # Draft the notes of a tutorial's moves from their commits: just draft ID prints them, just draft ID --write adds them
 draft id *args:

@@ -425,8 +425,9 @@ A file that a `do$` line writes needs no `patch$` line. If the move then changes
 `hooks-01.2` brings in `hooks/pre-commit` by `patch$ hooks/pre-commit`. The next move, `hooks-01.3`, is
 `do$ chmod +x hooks/pre-commit` alone.
 
-`just check` warns of a `patch$` line in a `do` or `watch` block, or before the first move of a step. It also
-warns of a sentence that asks for **Apply this file** or **Apply the whole move**, which timewalk no longer has.
+`just check` warns of a `patch$` line in a `do` or `watch` block, or above the first move of a step with moves.
+A step of one commit has no moves, and its `patch$` lines go in the step's own section. `just check` also warns of a
+sentence that asks for **Apply this file** or **Apply the whole move**, which timewalk no longer has.
 
 ### The notes of a tutorial
 
@@ -625,6 +626,46 @@ A tutorial has two ways of reading, from the same notes:
 - **Build it yourself** gives every command to run and every patch to apply, so that the student makes the
   project. It holds the shared text and the `do` blocks, as do mode does. Its patches come from the facts
   file, never from code in the notes.
+
+Build it yourself works without timewalk, in the student's own clone of the project. The pages take their
+commands from the facts file:
+
+- **Get the project.** `git clone`, then `git switch -c mine START`, where `START` is the commit where the walk
+  starts.
+- **`git check`.** **Get the project** also sets up a git alias, so that `git check SHA` compares the student's files with
+  a commit. It runs `git add -A`, so a new file counts too, and prints nothing when the files match. After each
+  move, the page gives `git check` with the move's commit.
+- **Take the files of a move.** A student who is stuck runs
+  `git restore --source BEFORE --staged -- :/ && git restore --source SHA --staged --worktree -- :/`. The first
+  half puts the files of the commit before the move in git's index. The second half deletes each file that the
+  index has and `SHA` does not, so it deletes only what the move deletes. The student's own files stay.
+
+### git check and loose
+
+timewalk compares the files that a walk's `loose` names by the names of their packages, so that a student who
+runs `uv add` a month later still matches. `git check` aims for the same:
+
+- A `pyproject.toml` goes through a git text conversion, `diff.names.textconv`, that cuts the version off each
+  requirement before git compares it.
+- A `uv.lock` is left out of the comparison, because a newer package can bring new packages with it. `git check`
+  shows a `uv.lock` that only one side has, and runs `uv lock --check` on the student's own.
+- Any other file that `loose` names has to be there when the commit has it, and not there when the commit does not.
+
+With `loose`, `git check` prints the lines that differ, not a list of files, because the text conversion works
+on lines.
+
+### A gap, a page of its own, and a binary file
+
+A small walk can skip commits between two stops. The stop after the gap starts with the same command as
+**Take the files of a move**, from the end of the stop before to the start of this one.
+
+On the website, each stop has a page, and a student can start there. The page gives
+`git rm -rq --cached --ignore-unmatch -- :/ && git restore --source START --staged --worktree -- :/`, with the
+commit where the stop starts as `START`. It empties the index first, so none of the student's files go. A file that
+the project deleted before the stop stays too, and the page says to delete it if `git check` lists it.
+
+GitHub's diff has no data for a binary file, so a `patch$` line of a binary file gives
+`git restore --source SHA --worktree -- ':(top,literal)PATH'` in place of a patch.
 
 A narrative has one way of reading, Read the tutorial. The app keeps its own switch, **Do** and **Watch**.
 

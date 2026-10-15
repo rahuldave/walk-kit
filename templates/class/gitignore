@@ -3,3 +3,4 @@
 # Python and the operating system
 __pycache__/
 .DS_Store
+/review-findings/

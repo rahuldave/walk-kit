@@ -28,6 +28,7 @@ renders with the same functions, and says how many problems there are.
 """
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import re
@@ -122,7 +123,7 @@ class Page:
     ) -> None:
         """Keep what each line needs."""
         self.facts, self.mode, self.site = facts, mode, site
-        self.url = facts["walk"]["github"]
+        self.url = github(facts)
         self.lines: list[str] = []
 
     def blob(
@@ -203,12 +204,31 @@ class Page:
                     self.add("", f"A patch to {link}.", "")
                 elif isinstance(by, int):   # a do$ line wrote the file first: the patch is what changes after it, under What changed
                     self.add("", f"Then change {link} as its patch shows.", "")
+                elif any(f["path"] == path and f["binary"] for f in files):   # GitHub's diff has no binary data
+                    self.add("", f"{link} is a binary file, with no patch to apply. Take it from the project:", "", "```bash",
+                             f"git restore --source {sha[:12]} --worktree -- {shlex.quote(':(top,literal)' + path)}", "```", "")
                 else:   # the whole change from GitHub, of which git apply takes this file alone, from the top of the project
                     diff = f"{self.url}/compare/{base}...{sha}.diff" if base else f"{self.url}/commit/{sha}.diff"
                     pattern = re.sub(r"([*?\[\\])", r"\\\1", path)   # git apply reads --include as a pattern
                     self.add("", f"Apply the patch to {link}, from the top of the project:", "", "```bash",
-                             f"curl -sL {diff} | git apply --include={shlex.quote(pattern)}", "```", "")
+                             f"curl -fsSL {diff} | git apply --include={shlex.quote(pattern)}", "```", "")
         flush()
+
+    def check(
+        self,
+        sha: str,  # The commit that the learner's files should now match
+        before: str | None,  # The commit before it, where the learner started the move; None at the first commit
+        what: str,  # "move" or "part"
+    ) -> None:
+        """In Build it yourself: the command that checks the learner's files against the commit, and the one that takes the
+        commit's files as they are. Both run anywhere in the learner's clone of the project."""
+        if self.mode != "do":
+            return
+        self.add("", f"Check your files against this {what}. The command prints nothing when they match, and otherwise shows what "
+                 "differs:", "", "```bash", f"git check {sha[:12]}", "```", "",
+                 f"If you are stuck, this command puts the files of this {what} in place of yours. A file that you made yourself "
+                 "stays:", "",
+                 "```bash", catch_up(before, sha), "```", "")
 
     def what_changed(
         self,
@@ -328,14 +348,25 @@ def stop_page(
     top = 1 if site else 2
     if not site:
         page.add(f'<a id="{anchor(stop["name"])}"></a>', "", f"{'#' * top} {stop['number']} {stop['title']}".rstrip(), "")
+    before = facts["stops"][at - 2]["commit"] if at > 1 else None
+    if mode == "do" and stop["start"] and before and stop["start"] != before:   # the walk skips commits: the learner takes them
+        page.add("", "This part does not start where the part before it ends, because the walk skips some changes. This command "
+                 "puts the files that this part starts from in place of yours. Run it, and then go on:", "", "```bash", catch_up(before, stop["start"]), "```", "")
+    if site and mode == "do" and stop["start"]:   # a page of its own: a reader may start here
+        page.add("", "If you start at this part, make your clone as **Get the project** says, and then run this command. It puts "
+                 "in your clone the files that this part starts from. A file that the project deleted before this part stays, so "
+                 "delete it if `git check` lists it:", "",
+                 "```bash", catch_up(None, stop["start"]), "```", "")
     page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"], stop["start"] if not stop["moves"] else None)
+    if not stop["moves"] and stop["start"]:
+        page.check(stop["commit"], stop["start"], "part")
     if stop["moves"]:
         before = f"[The code before this part]({page.tree(stop['start'])}). " if stop["start"] else ""
         page.add("", f"{before}[The code after it]({page.tree(stop['commit'])}).", "")
     else:
         items = [p for p in stop["parts"] if p["kind"] == "item"]
         page.what_changed(top + 1, stop["name"], stop["files"], items, [], stop["commit"], stop["start"], first=not stop["start"])
-    for move in stop["moves"]:
+    for number, move in enumerate(stop["moves"]):
         level = top + 1
         heading = f"{'#' * level} {move['number']} {move['title']}".rstrip()
         if site:
@@ -343,9 +374,93 @@ def stop_page(
         else:
             page.add("", f'<a id="{anchor(move["name"])}"></a>', "", heading, "")
         page.parts(move["parts"], move["commit"], move["files"], move["name"])
+        page.check(move["commit"], stop["moves"][number - 1]["commit"] if number else stop["start"], "move")
         commands = [p["text"] for p in move["parts"] if p["kind"] == "command" and p["makes"]]
         page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], commands, move["commit"], None)
     return page.lines
+
+
+def github(
+    facts: dict,  # The facts of the walk
+) -> str:  # The project's address on GitHub, with no / or .git at the end
+    "Find the project's address on GitHub."
+    return facts["walk"]["github"].rstrip("/").removesuffix(".git")
+
+
+def catch_up(
+    before: str | None,  # The commit where the learner's files were meant to be; None if unknown
+    sha: str,  # The commit to take the files of
+) -> str:  # The command, for the learner's clone
+    """Make the command that puts the files of a commit in place of the learner's. git restore takes away each file that
+    the index has and the commit does not: so the index first gets the files of the commit before, and the learner's own
+    files stay. Without that commit, the index is first emptied, so no file goes: a file that the project deleted before
+    stays, and the check lists it."""
+    first = f"git restore --source {before[:12]} --staged -- :/" if before else "git rm -rq --cached --ignore-unmatch -- :/"
+    return f"{first} && git restore --source {sha[:12]} --staged --worktree -- :/"
+
+
+# Cut each requirement of a pyproject.toml to its name, its extras and its marker, as timewalk's loose does
+NAMES = r"""sed -E 's/^([[:space:]]*\"[A-Za-z0-9_.-]+(\\[[^]]*\\])?)[^\";]*/\\1/'"""
+
+
+def loose_kinds(
+    facts: dict,  # The facts of a tutorial
+) -> tuple[list[str], list[str], list[str]]:  # The globs of loose for pyproject.toml files, for uv.lock files, and for the rest
+    """Sort the globs of the walk's loose by the file that each names, by its last part, as timewalk does: a pyproject.toml
+    in any folder matches by the names of its packages, and so does a uv.lock."""
+    loose = facts["walk"].get("loose") or []
+    last = {glob: glob.rsplit("/", 1)[-1] for glob in loose}
+    names = [glob for glob in loose if fnmatch.fnmatchcase("pyproject.toml", last[glob])]
+    lock = [glob for glob in loose if glob not in names and fnmatch.fnmatchcase("uv.lock", last[glob])]
+    return names, lock, [glob for glob in loose if glob not in names and glob not in lock]
+
+
+def check_lines(
+    facts: dict,  # The facts of a tutorial
+) -> list[str]:  # The commands that set up git check in the learner's clone
+    """Make the commands that add `git check SHA` to the learner's clone. Without `loose`, it stages every file and lists the
+    files that differ from the commit. With `loose`, it compares each pyproject.toml that loose names by the names of its
+    packages, leaves the lines of a uv.lock out but runs `uv lock --check`, and checks only that any other file that loose
+    names is there, as timewalk does."""
+    names, lock, other = loose_kinds(facts)
+    skipped = lock + other   # their lines are not compared
+    if not (names or skipped):
+        body = 'git add -A && git diff --cached --stat "$1"'
+    else:
+        body = 'git add -A && git diff --cached "$1" -- ":/"' + "".join(f' ":(top,exclude,glob){glob}"' for glob in skipped)
+        if skipped:   # the project's copy and the learner's are both there, or both not
+            body += ' && git diff --cached --name-status --diff-filter=AD "$1" --' + "".join(f' ":(top,glob){glob}"' for glob in skipped)
+        if lock:   # the learner's uv.lock fits the learner's pyproject.toml
+            body += ' && { [ ! -f uv.lock ] || uv lock --check -q; }'
+    lines = [f"git config alias.check '!f() {{ {body}; }}; f'"]
+    if names:   # a glob with no / names a file at the top, as in timewalk; git's attributes would match it in any folder
+        attributes = [f"echo '{glob if '/' in glob else '/' + glob} diff=names' >> .git/info/attributes" for glob in names]
+        lines = [*attributes, f'git config diff.names.textconv "{NAMES}"', *lines]
+    return lines
+
+
+def clone_lines(
+    facts: dict,  # The facts of a tutorial
+    level: int,  # The level of its heading
+) -> list[str]:  # How to get the project, for Build it yourself
+    """Say how to get a clone of the project, at the commit where the walk starts: Build it yourself runs in it."""
+    if not facts["stops"]:
+        return []
+    first = facts["stops"][0]
+    start = (first["start"] or first["commit"])[:12]
+    name = github(facts).rsplit("/", 1)[-1]
+    names, lock, _ = loose_kinds(facts)
+    note = (" It compares `pyproject.toml` by the names of its packages, so another version of a package does not count as a "
+            "difference." if names else "")
+    if lock:   # check_lines leaves out uv.lock's lines, and runs uv lock --check
+        note += (" It does not compare the lines of `uv.lock`. It checks that you and the project both have a `uv.lock`, or both "
+                 "have none. It also checks that your `uv.lock` is up to date with your `pyproject.toml`.")
+    clone = ("You build the project in a clone of your own, on a branch `mine` that starts where this walk starts. Run the "
+             "commands of these pages in its top folder.")
+    return ["", f"{'#' * level} Get the project", "", clone, "",
+            "```bash", f"git clone {github(facts)}", f"cd {name}", f"git switch -c mine {start}", "```", "",
+            "Then add the command `git check`, which compares your files with the project's after each move." + note, "",
+            "```bash", *check_lines(facts), "```", ""]
 
 
 def intro_lines(
@@ -378,7 +493,12 @@ def markdown_files(
         if other:
             lines[-1] += f" [{WAYS[other[0]][0]}]({WAYS[other[0]][1]}.md) is the other way to read it."
         lines += ["", WHAT_CHANGED, *(["", BY_HAND] if mode == "do" else []), ""]
-        lines += intro_lines(facts, mode) + [""]
+        intro = [*intro_lines(facts, mode), ""]
+        clone = clone_lines(facts, 2) if mode == "do" else []
+        if any(p["kind"] == "command" for p in of_mode(facts["intro"], mode)):   # the intro's commands run in the clone
+            lines += clone + intro
+        else:
+            lines += intro + clone
         for at, stop in enumerate(facts["stops"], 1):
             lines += [*stop_page(facts, stop, at, mode, False), ""]
         files[f"{file}.md"] = squeeze(lines)
@@ -399,6 +519,8 @@ def site_files(
     for mode in ways(facts):
         name, folder, what = WAYS[mode]
         front += [f"## {name}", "", what, ""]
+        if mode == "do" and facts["stops"]:
+            front += [*clone_lines(facts, 3), "### The parts", ""]
         sidebar += [f"      - section: {json.dumps(name)}", "        contents:"]
         for at, stop in enumerate(facts["stops"], 1):
             label = f"{stop['number']} {stop['title']}".strip()

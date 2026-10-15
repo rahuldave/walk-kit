@@ -16,11 +16,9 @@ from private import fenced, private_lines, public
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES = HERE.parent / "templates"
-# What the templates name, and the one place that says where timewalk comes from: timewalk's branch walks. Only that
-# branch has the walks, the tutorials, timewalk-check and the saved branches that the templates use. When timewalk's walks
-# reaches its main, set this to "git+https://github.com/rahuldave/timewalk". Until then, walk-update moves each walk
-# repository onto timewalk's walks, and says so
-GITHUB = "git+https://github.com/rahuldave/timewalk@walks"
+# What the templates name, and the one place that says where timewalk comes from: timewalk's main, unpinned. A walk-update
+# moves a walk repository that names timewalk's old branch walks onto main
+GITHUB = "git+https://github.com/rahuldave/timewalk"
 TIMEWALK = os.environ.get("TIMEWALK", GITHUB)  # what a run of these scripts uses
 UVX = ["uvx", "--refresh-package", "timewalk", "--from"]  # then the source, then the command
 NO_TOML = 3  # the exit code of `common.py manifest` under a Python without tomllib: the class justfile goes on without it

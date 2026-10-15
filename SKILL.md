@@ -55,16 +55,24 @@ covers the notes, the slides and the cues. It also covers the READMEs, the `AGEN
 and walk repositories, and the commit and tag messages that become notes.
 
 1. Read `style/GUIDE.md` before you write.
-2. Run the checker, and fix every hard problem. Do it before you show the work, and before you ask to commit. In a
-   class folder, `just style` checks the prose of the class. `scripts/style.py` names the files that it checks.
-   Outside a class folder, run the checker yourself:
+2. Run the checker, `style/check.py`, and fix every hard problem. The checker looks only at form, for example
+   the number of words in a sentence. It does not judge whether a reader can follow the text.
+3. Have the writing reviewed by `scripts/review.py`. A fresh model reads the text that changed since the last
+   commit, with the reviewer's prompt in `style/REVIEW.md`, and reports where a reader would stumble. Fix what is
+   real. Each round adds its findings to the file's report in `review-findings/`. Under each finding that you fix,
+   write a line `- Fixed: ...`. The third round since the last commit passes, and leaves the other findings for the
+   owner to judge. More rounds make the prose stiff, so rewrite by hand instead.
+4. Do both before you show the work, and before you ask to commit. In a class folder, `just style` runs both.
+   Outside one, run them yourself:
 
    ```
    python3 SKILL_DIR/style/check.py README.md AGENTS.md
    python3 SKILL_DIR/style/check.py -v README.md     # also the soft notes: fix those where a rule applies
+   python3 SKILL_DIR/scripts/review.py README.md AGENTS.md --repo ~/Projects/bla   # --repo: the reviewer may read the project
    ```
 
-3. A commit message or a tag message is not a file. Write it to a file in a temporary folder, and check that file.
+5. A commit message or a tag message is not a file. Write it to a file in a temporary folder, and check that file
+   with `style/check.py` and `scripts/review.py`.
 
 `just style` leaves out the forms that the notes own, so keep them as they are. A command line, such as
 `$ just setup` or `runs$ uv run train`, stays as the reader types it. A line `time: m:ss` stays. The checker skips

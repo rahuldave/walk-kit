@@ -12,6 +12,10 @@ read a tutorial. **Read the tutorial** explains each change, with the code to lo
 every command to run and every patch to apply, so that you make the project yourself. Each part of the pages ends
 with **What changed**. It lists every file of the change, with a link to the file and its whole diff.
 
+Build it yourself needs no timewalk. You make a new clone of @project@ for it, and the pages
+give every command to run in it. They also show how to add a command to that clone, `git check`, which tells
+you after each change whether your files match the project's.
+
 [The pages on GitHub](walks/README.md) list each walk with its two ways of reading. The same pages are a website,
 [@upstream@.github.io/@project@-walk](https://@upstream@.github.io/@project@-walk/).
 

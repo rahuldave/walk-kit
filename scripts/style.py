@@ -1,9 +1,14 @@
-"""Check the prose of a class against the writing guide, style/GUIDE.md, with the checker style/check.py.
+"""Check the prose of a class against the writing guide, style/GUIDE.md: its form with style/check.py, then its language with a model.
 
     python3 style.py                  check the class in this folder
     python3 style.py --class DIR      check the class in DIR
     python3 style.py -v               also show the soft notes, for a person to judge
     python3 style.py PAGE.md ...      check these files, such as the pages that render.py writes
+    python3 style.py --repo DIR       let the review read the project in DIR
+
+style/check.py checks the mechanical rules of the guide: the length of a sentence, a colon, a contraction, a dash. It
+is not a review of the writing. When the form passes, review.py asks a model to review the text that changed since the
+last commit, for a reader of 12, with the reviewer's prompt in style/REVIEW.md. A finding fails the check too.
 
 The script checks the prose of the class, and nothing else of its folder: README.md, AGENTS.md and CLAUDE.md, the
 notes of every walk, and the Markdown files that the slides manifest of each walk names. The walks are those of
@@ -125,6 +130,7 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--class", dest="folder", type=Path, default=Path("."), help="the class folder (default: this folder)")
     parser.add_argument("-v", action="store_true", help="also show the soft notes, for a person to judge")
+    parser.add_argument("--repo", type=Path, help="the project, which the review may read")
     parser.add_argument("files", nargs="*", type=Path, help="files to check in place of the class's prose, such as rendered pages")
     args = parser.parse_args()
     folder = args.folder.expanduser().resolve()
@@ -152,7 +158,11 @@ def main() -> int:  # The exit code: 1 if a file has a hard problem
             for note in soft if args.v else []:
                 print("  soft " + note)
             failed = failed or bool(hard)
-    return 1 if failed or problems else 0
+    if failed or problems:
+        return 1
+    from review import KIT, run  # here: review.py imports this module
+
+    return 1 if run(files, False, [folder, KIT] + ([args.repo.expanduser().resolve()] if args.repo else [])) else 0
 
 
 if __name__ == "__main__":
