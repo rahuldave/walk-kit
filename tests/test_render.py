@@ -5,6 +5,7 @@
 Each test makes a small git repository in a temporary folder. The tests of pyproject.toml and uv.lock need uv.
 """
 
+import json
 import os
 import re
 import shutil
@@ -364,12 +365,59 @@ class AfterPatch(Case):
         self.assertEqual(render.source_gaps(self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")[0]), [])
 
 
+SYNC = " && uv sync --locked --all-groups --all-packages"
+
+
+def take(
+    lines: list[int],  # The places of the lines whose files it takes, this one first
+    files: list[str],  # The files that it takes
+    command: str = "",  # Its command; "" for git restore of the files from cccccccccccc, and uv sync for a uv.lock
+    after: bool = False,  # The line runs a program, and the command comes after it
+    deletes: tuple[str, ...] = (),  # The files that it deletes
+) -> dict:  # A take, as the facts of timewalk 1.4.4 give it
+    "Make the take of a do$ line, as timewalk-export --json writes it."
+    command = command or "git restore --source cccccccccccc -- " + " ".join(files) + (SYNC if any(f.endswith("uv.lock") for f in files) else "")
+    return {"lines": lines, "files": files, "deletes": list(deletes), "command": command, "after": after}
+
+
+JOINED = {"lines": [], "files": [], "deletes": [], "command": "", "after": False}   # a later line that joins a take
+
+
+def shows_the_takes(
+    test: unittest.TestCase,  # The test, for its asserts
+    facts: dict,  # The facts of a tutorial
+) -> int:  # How many takes give a command
+    """Check that Build it yourself shows exactly the facts' takes: each take's command once, at its line; the line itself
+    only when after is true, just before the command; and no line that a take stands for."""
+    import follow
+
+    count = 0
+    for at, stop in enumerate(facts["stops"], 1):
+        commands = [c for block in follow.blocks_of("\n".join(render.stop_page(facts, stop, at, "do", False))) for c in block.commands]
+        for change in (stop, *stop["moves"]):
+            makes = [p for p in change["parts"] if p["kind"] == "command" and p["makes"]]
+            for part in makes:
+                found = part["take"]
+                if not found:
+                    continue
+                if found["command"]:
+                    count += 1
+                    test.assertEqual(commands.count(found["command"]), 1, (found, commands))
+                    if found["after"]:
+                        test.assertEqual(commands[commands.index(found["command"]) - 1], part["text"], "the line, then the take")
+                    for n in found["lines"][1 if found["after"] else 0:]:
+                        test.assertNotIn(makes[n]["text"], commands, "a line that the take stands for does not run")
+                else:
+                    test.assertNotIn(part["text"], commands, "a line that joins a take does not run")
+    return count
+
+
 class Strict(unittest.TestCase):
-    "A walk whose loose does not name pyproject.toml and uv.lock: the student takes a uv command's files in place of running it."
+    "A strict walk: the facts' take of a uv command's line, rendered. timewalk's rule finds the takes; the page shows them."
 
     def page(
         self,
-        loose: list[str],  # The walk's loose
+        found: dict | None,  # The take of the do$ line, from the facts; None: the line runs
         command: str = "uv add --dev ruff",  # The do$ line
         paths: tuple[str, ...] = ("pyproject.toml", "uv.lock"),  # The files that it writes, each by it
         then: bool = False,  # A patch$ line of the first file after it
@@ -377,7 +425,7 @@ class Strict(unittest.TestCase):
         "Render one move whose do$ line writes the files."
         import follow
 
-        parts = [{"kind": "command", "text": command, "makes": True, "mode": "shared", "track": "", "writes": list(paths)}]
+        parts = [{"kind": "command", "text": command, "makes": True, "mode": "shared", "track": "", "writes": list(paths), "take": found}]
         parts += [{"kind": "patch", "mode": "shared", "path": paths[0]}] if then else []
         files = [{"path": path, "old_path": None, "status": "modified", "added": 1, "removed": 1, "binary": False,
                   "diff": "@@ -1 +1 @@\n-a\n+b\n", "names": {"added": [], "removed": [], "changed": []}, "by": 0,
@@ -385,50 +433,53 @@ class Strict(unittest.TestCase):
         move = {"name": "step-01.1", "number": "1.1", "title": "ruff", "commit": "c" * 40, "parts": parts, "files": files}
         stop = {"name": "step-01", "number": "1", "title": "One", "start": "a" * 40, "commit": "c" * 40, "parts": [], "files": files,
                 "moves": [move]}
-        facts = {"walk": {"kind": "tutorial", "loose": loose, "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
+        facts = {"walk": {"kind": "tutorial", "loose": [], "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
                  "history": {}}
         page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
         return page, [c for block in follow.blocks_of(page) for c in block.commands]
 
     def test_strict_takes_the_files(self) -> None:
-        "Without loose, the page gives git restore of the line's files and uv sync --locked, and not uv add."
-        page, commands = self.page([])
-        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages", commands)
+        "A take: the page gives its command, git restore of the files and uv sync --locked, and not uv add."
+        page, commands = self.page(take([0], ["pyproject.toml", "uv.lock"]))
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock" + SYNC, commands)
         self.assertNotIn("uv add --dev ruff", commands)
-        self.assertIn("The author ran `uv add --dev ruff` here.", page)
+        self.assertIn("The author ran `uv add --dev ruff` here. It writes `pyproject.toml` and `uv.lock`. On a later day, it can write "
+                      "newer versions of packages than the author's, and then git check finds that your files differ. So do not run it.", page)
+        self.assertIn("installs exactly the versions that `uv.lock` names:", page)
 
-    def test_loose_runs_the_command(self) -> None:
-        "With loose naming both files, the page gives uv add, as before."
-        page, commands = self.page(["pyproject.toml", "uv.lock"])
-        self.assertIn("uv add --dev ruff", commands)
-        self.assertNotIn("uv sync --locked", page)
-        self.assertNotIn("The author ran", page)
+    def test_no_take_runs_the_command(self) -> None:
+        "No take, as in a loose walk, or for a line that is not uv: the page gives the line as it is."
+        for line in ("uv add --dev ruff", "sed -i '' s/a/b/ pyproject.toml"):
+            page, commands = self.page(None, line)
+            self.assertIn(line, commands)
+            self.assertNotIn("uv sync --locked", page)
+            self.assertNotIn("The author ran", page)
 
-    def test_every_file_of_the_line(self) -> None:
-        "uv init writes more than pyproject.toml: every file whose by is the line is taken, an odd path as a literal, and no uv sync without uv.lock."
-        _, commands = self.page([], "uv init --lib", ("pyproject.toml", ".python-version", "src/a[1].py"))
-        self.assertIn("git restore --source cccccccccccc -- pyproject.toml .python-version ':(top,literal)src/a[1].py'", commands)
-
-    def test_only_uv_commands(self) -> None:
-        "A do$ line that is not uv runs, even when it writes pyproject.toml."
-        _, commands = self.page([], "sed -i '' s/a/b/ pyproject.toml", ("pyproject.toml",))
-        self.assertIn("sed -i '' s/a/b/ pyproject.toml", commands)
+    def test_the_command_of_the_take(self) -> None:
+        "The page gives the take's command as the facts have it, an odd path as a literal, with no uv sync without uv.lock."
+        command = "git restore --source cccccccccccc -- pyproject.toml .python-version ':(top,literal)src/a[1].py'"
+        page, commands = self.page(take([0], ["pyproject.toml", ".python-version", "src/a[1].py"], command), "uv init --lib",
+                                   ("pyproject.toml", ".python-version", "src/a[1].py"))
+        self.assertIn(command, commands)
+        self.assertIn("It takes each file as the author has it from the project:", page)
 
     def test_patch_after_it(self) -> None:
         "A patch$ line of a file that the student took gives nothing to apply: the file has the change already."
-        page, commands = self.page([], then=True)
+        page, commands = self.page(take([0], ["pyproject.toml", "uv.lock"]), then=True)
         self.assertFalse([c for c in commands if c.startswith("git apply")], commands)
         self.assertIn("nothing to apply", page)
+        self.assertIn("and you take it from the project", page)
 
     def lines(
         self,
-        commands: list[tuple[str, list[str]]],  # Each do$ line, with the files that it writes, in order
+        commands: list[tuple[str, list[str], dict | None]],  # Each do$ line, with the files that it writes and its take, in order
         files: dict[str, int],  # Each file of the move, with its by: the last line that writes it
-    ) -> tuple[str, list[str]]:  # Build it yourself's text of the move, and the commands of its blocks
+    ) -> tuple[str, list[str], dict]:  # Build it yourself's text of the move, the commands of its blocks, and the facts
         "Render one strict move of several do$ lines."
         import follow
 
-        parts = [{"kind": "command", "text": text, "makes": True, "mode": "shared", "track": "", "writes": writes} for text, writes in commands]
+        parts = [{"kind": "command", "text": text, "makes": True, "mode": "shared", "track": "", "writes": writes, "take": found}
+                 for text, writes, found in commands]
         found = [{"path": path, "old_path": None, "status": "modified", "added": 1, "removed": 1, "binary": False,
                   "diff": "@@ -1 +1 @@\n-a\n+b\n", "names": {"added": [], "removed": [], "changed": []}, "by": by, "patch": ""}
                  for path, by in files.items()]
@@ -438,43 +489,72 @@ class Strict(unittest.TestCase):
         facts = {"walk": {"kind": "tutorial", "loose": [], "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
                  "history": {}}
         page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
-        return page, [c for block in follow.blocks_of(page) for c in block.commands]
+        return page, [c for block in follow.blocks_of(page) for c in block.commands], facts
 
     def test_two_uv_lines(self) -> None:
-        "Two uv lines that write the same files: one command takes them, and the student runs neither, not even the first."
+        "Two uv lines in one take: one command takes their files, and the student runs neither, not even the first."
         both = ["pyproject.toml", "uv.lock"]
-        page, commands = self.lines([("uv add six", both), ("uv add --dev ruff", both)], {"pyproject.toml": 1, "uv.lock": 1})
+        page, commands, facts = self.lines([("uv add six", both, take([0, 1], both)), ("uv add --dev ruff", both, JOINED)],
+                                           {"pyproject.toml": 1, "uv.lock": 1})
         self.assertEqual([c for c in commands if c.startswith(("uv", "git restore --source cccccccccccc -- "))],
-                         ["git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages"])
+                         ["git restore --source cccccccccccc -- pyproject.toml uv.lock" + SYNC])
         self.assertIn("The author ran `uv add six`, then `uv add --dev ruff` here. They write", page)
+        self.assertEqual(shows_the_takes(self, facts), 1)
 
-    def test_a_later_line_writes_its_file(self) -> None:
-        "A sed after uv add changes pyproject.toml: the student takes both files as the move ends, and runs neither line."
-        page, commands = self.lines([("uv add six", ["pyproject.toml", "uv.lock"]), ("sed -i '' s/a/b/ pyproject.toml", ["pyproject.toml"]),
-                                     ("echo x > notes.txt", ["notes.txt"])], {"pyproject.toml": 1, "uv.lock": 0, "notes.txt": 2})
-        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages", commands)
+    def test_a_joined_line_that_is_not_uv(self) -> None:
+        "A sed that joins the take does not run; a line with no take runs."
+        page, commands, facts = self.lines([("uv add six", ["pyproject.toml", "uv.lock"], take([0, 1], ["pyproject.toml", "uv.lock"])),
+                                            ("sed -i '' s/a/b/ pyproject.toml", ["pyproject.toml"], JOINED),
+                                            ("echo x > notes.txt", ["notes.txt"], None)], {"pyproject.toml": 1, "uv.lock": 0, "notes.txt": 2})
         self.assertFalse([c for c in commands if c.startswith(("sed", "uv add"))], commands)
         self.assertIn("echo x > notes.txt", commands)
+        self.assertEqual(shows_the_takes(self, facts), 1)
 
-    def test_a_line_between_joins(self) -> None:
-        "A line between that writes a file of a later line of the group joins it, so it does not change a file that is taken already."
-        _, commands = self.lines([("uv add six", ["pyproject.toml", "uv.lock"]), ("echo y > b.txt", ["b.txt"]),
-                                  ("cp pyproject.toml b.txt", ["b.txt", "pyproject.toml"])],
-                                 {"pyproject.toml": 2, "uv.lock": 0, "b.txt": 2})
-        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock b.txt && uv sync --locked --all-groups --all-packages", commands)
-        self.assertFalse([c for c in commands if c.startswith(("echo", "cp"))], commands)
+    def test_a_program_runs_and_then_the_take(self) -> None:
+        "A take with after: uv run runs a program, so the student runs it, and then the command; a later uv add of its take does not run."
+        files = ["data.csv", "pyproject.toml", "uv.lock"]
+        page, commands, facts = self.lines([("uv run python make.py", ["data.csv", "uv.lock"], take([0, 1], files, after=True)),
+                                            ("uv add ruff", ["pyproject.toml", "uv.lock"], JOINED)], {"data.csv": 0, "pyproject.toml": 1, "uv.lock": 1})
+        self.assertEqual(commands, ["uv run python make.py", "git restore --source cccccccccccc -- data.csv pyproject.toml uv.lock" + SYNC, "git check cccccccccccc",
+                                    commands[-1]])
+        self.assertIn("`uv run python make.py` runs a program, so run it. It also writes `data.csv`, `pyproject.toml` and `uv.lock`.", page)
+        self.assertIn("The author then ran `uv add ruff`, which writes the same files, so do not run it. After it, run this command", page)
+        self.assertEqual(shows_the_takes(self, facts), 1)
 
-    def test_a_lock_in_a_folder(self) -> None:
-        "The uv.lock of a project in a folder is synced in that folder."
-        _, commands = self.lines([("cd sub && uv add six", ["sub/pyproject.toml", "sub/uv.lock"])], {"sub/pyproject.toml": 0, "sub/uv.lock": 0})
-        self.assertIn("git restore --source cccccccccccc -- sub/pyproject.toml sub/uv.lock && uv sync --directory sub --locked --all-groups "
-                      "--all-packages", commands)
+    def test_a_step_of_one_commit(self) -> None:
+        "A step with no moves has its own takes in the facts: its page gives the take, and What changed says that the student takes the file."
+        import follow
 
-    def test_runs_uv(self) -> None:
-        "A line runs uv when a command of it starts with uv, past NAME=value; uvx and a word uv given to echo do not count."
-        for text, runs in [("uv add x", True), ("cd a && uv add x", True), ("(uv lock)", True), ("A=1 uv lock", True),
-                           ("echo uv", False), ("uvx ruff", False), ("echo a=b uv", False)]:
-            self.assertEqual(render.runs_uv(text), runs, text)
+        files = [{"path": path, "old_path": None, "status": "modified", "added": 1, "removed": 1, "binary": False, "diff": "@@ -1 +1 @@\n-a\n+b\n",
+                  "names": {"added": [], "removed": [], "changed": []}, "by": 0, "patch": ""} for path in ("pyproject.toml", "uv.lock")]
+        parts = [{"kind": "command", "text": "uv add rich", "makes": True, "mode": "shared", "track": "", "writes": ["pyproject.toml", "uv.lock"],
+                  "take": take([0], ["pyproject.toml", "uv.lock"])}]
+        stop = {"name": "step-02", "number": "2", "title": "Rich", "start": "a" * 40, "commit": "c" * 40, "parts": parts, "files": files, "moves": []}
+        facts = {"walk": {"kind": "tutorial", "loose": [], "github": "https://github.com/o/demo"}, "observed": True,
+                 "stops": [{**stop, "name": "step-01", "start": None, "parts": [], "commit": "a" * 40}, stop], "history": {}}
+        page = "\n".join(render.stop_page(facts, stop, 2, "do", False))
+        commands = [c for block in follow.blocks_of(page) for c in block.commands]
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock" + SYNC, commands)
+        self.assertNotIn("uv add rich", commands)
+        self.assertIn("It comes from `uv add rich`, and you take it from the project.", page)
+        self.assertEqual(shows_the_takes(self, {**facts, "stops": [stop]}), 1)
+
+    def test_old_facts_stop(self) -> None:
+        "Facts of a timewalk before 1.4.4 stop the render with a message to update timewalk: an older layout, or a do$ line with no take."
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "facts.json"
+            part = {"kind": "command", "text": "uv add x", "makes": True, "mode": "shared", "track": "", "writes": None}
+            facts = {"format": 4, "timewalk": "1.4.3", "walk": {"kind": "tutorial"}, "stops": [{"parts": [], "moves": [{"parts": [part]}]}]}
+            for layout, made in ((3, part), (4, part), (4, {**part, "take": take([0], ["uv.lock"]) | {"after": None}} )):
+                made_facts = {**facts, "format": layout, "stops": [{"parts": [], "moves": [{"parts": [made]}]}]}
+                if layout == 4 and "take" in made:
+                    del made["take"]["after"]
+                path.write_text(json.dumps(made_facts))
+                with self.assertRaises(SystemExit) as stopped:
+                    render.load(path)
+                self.assertIn("update timewalk to 1.4.4 or later", str(stopped.exception))
+            path.write_text(json.dumps({**facts, "stops": [{"parts": [], "moves": [{"parts": [{**part, "take": None}]}]}]}))
+            self.assertEqual(render.load(path)["format"], 4)
 
     def test_the_title_of_toc(self) -> None:
         "timewalk-export gets the title that toc.toml gives the walk, so a strict walk on the tutorial's notes has a name of its own."
@@ -495,6 +575,26 @@ class Strict(unittest.TestCase):
             toc.write_text('[[walk]]\nid = "a"\nkind = "tutorial"\nfolder = "w"\nloose = ["uv.lock"]\n\n'
                            '[[walk]]\nid = "b"\nkind = "tutorial"\nfolder = "w"\n')
             self.assertEqual([entry["id"] for entry in render.page_walks(toc)], ["a", "b"])
+
+
+TALLY = Path(os.environ.get("TIMEWALK_TEST", Path.home() / "Projects" / "timewalk-test"))
+
+
+@unittest.skipUnless((TALLY / "history" / "build.py").is_file() and shutil.which("uvx"), "timewalk-test or uv is not here")
+class FactsTakes(unittest.TestCase):
+    "The pages of timewalk-test's strict walks, from timewalk's own facts: Build it yourself shows exactly each take of the facts."
+
+    def test_the_page_shows_exactly_the_facts_take(self) -> None:
+        "Every take of the walks strict and strict-extra: its command once, at its line, and no line that it stands for."
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder) / "repo"
+            subprocess.run([sys.executable, str(TALLY / "history" / "build.py"), str(repo)], check=True, capture_output=True)
+            count = 0
+            for ident in ("strict", "strict-extra"):
+                facts = render.export(repo, TALLY / "toc.toml", ident, "https://github.com/rahuldave/tally", Path(folder))
+                self.assertTrue(facts["observed"])
+                count += shows_the_takes(self, facts)
+            self.assertGreaterEqual(count, 5, "ruff in strict; tabulate, mdformat, the library, talib and the remove in strict-extra")
 
 
 class StrictUv(Case):
@@ -518,7 +618,12 @@ class StrictUv(Case):
             sh(self.repo, command)
         sha = commit(self.repo, {}, "move")
         paths = sh(self.repo, f"git diff --name-only {start} {sha}").stdout.split()
-        parts = [{"kind": "command", "text": "; ".join(made), "makes": True, "mode": "shared", "track": "", "writes": paths}]
+        kept = sorted(path for path in paths if (self.repo / path).exists())
+        command = (f"git restore --source {sha[:12]} -- " + " ".join(kept)
+                   + "".join(f" && uv sync{' --directory ' + p.rsplit('/', 1)[0] if '/' in p else ''} --locked --all-groups --all-packages"
+                             for p in kept if p.endswith("uv.lock")))
+        found_take = {"lines": [0], "files": kept, "deletes": [], "command": command, "after": False}   # as timewalk's facts give it
+        parts = [{"kind": "command", "text": "; ".join(made), "makes": True, "mode": "shared", "track": "", "writes": paths, "take": found_take}]
         found = [{"path": path, "old_path": None, "status": "modified" if path in before else "added", "added": 1, "removed": 0,
                   "binary": False, "diff": "", "names": {"added": [], "removed": [], "changed": []}, "by": 0, "patch": ""} for path in paths]
         move = {"name": "step-01.1", "number": "1.1", "title": "uv", "commit": sha, "parts": parts, "files": found}

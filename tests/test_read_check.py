@@ -51,11 +51,11 @@ def command(
     makes: bool,  # A do$ line, which makes the change
 ) -> dict:  # A part that is a command
     "Write a command of the notes."
-    return {"kind": "command", "mode": "shared", "text": text, "makes": makes, "track": None, "writes": []}
+    return {"kind": "command", "mode": "shared", "text": text, "makes": makes, "track": None, "writes": [], "take": None}
 
 
 FACTS = {
-    "format": 3, "walk": {"id": "w", "title": "Demo", "kind": "tutorial", "github": URL, "loose": []},
+    "format": 4, "walk": {"id": "w", "title": "Demo", "kind": "tutorial", "github": URL, "loose": []},
     "intro": [prose("We build demo, a file of words.")], "history": {}, "errors": [], "warnings": [], "observed": True,
     "stops": [
         {"name": "step-00", "number": "0", "title": "Where it starts", "tag": "step-00", "commit": A, "start": None, "own": None,

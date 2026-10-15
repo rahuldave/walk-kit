@@ -340,6 +340,11 @@ is then loose or strict. Its key `loose` in its table in `toc.toml` chooses:
   `do$` line of the move that writes one of these files, such as a `sed` that edits `pyproject.toml`, does not
   run either. The command takes the file as the move ends. Read the tutorial still says which command the author
   ran.
+- **A `uv` command that runs a program.** The page leaves out only `uv add`, `uv remove`, `uv lock`, `uv init`,
+  `uv version` and `uv sync`. A line such as `uv run python make.py` runs a program, so the learner runs it. If it
+  also writes `uv.lock`, the command that takes the files comes after it. A step with no moves gets the same
+  commands. timewalk decides all of this, and gives it in its facts as `take`, so the pages need timewalk 1.4.4 or
+  later. With an older timewalk, `render.py` stops and says to update it.
 
 Choose strict when the learner must have the author's exact versions. Choose loose when the learner
 should learn to run `uv add`. A loose walk sets this key:

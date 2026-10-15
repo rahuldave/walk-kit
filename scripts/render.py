@@ -30,11 +30,12 @@ The values come from the project, from `--repo`, so the pages of such a walk nee
 only through uv commands on do$ lines: `--check` and `--class` name a patch$ line that changes them.
 
 A tutorial whose `loose` does not name `pyproject.toml` or `uv.lock` is strict: git check compares them line by line. Run
-on a later day, a uv command such as `uv add` writes newer versions, so in Build it yourself the student does not run a
-do$ line of uv that writes them. The page says which command the author ran, and gives `git restore` of every file that
-the line writes, from the move's commit, then `uv sync --locked --all-groups --all-packages`, which installs exactly the
-versions of that uv.lock, with every group and every package of a workspace. A later do$ line that writes one of those
-files does not run either: the student takes each file as the move ends.
+on a later day, a uv command such as `uv add` writes newer versions. timewalk's facts (format 4, timewalk 1.4.4 or later)
+give each such do$ line its `take`, by timewalk's own rule, and the page shows it as it is. A take's command is `git
+restore` of every file that the lines write, from the commit, then `uv sync --locked --all-groups --all-packages`, which
+installs exactly the versions of that uv.lock. In place of a line such as `uv add`, the page says which command the
+author ran, and gives the take's command; a later do$ line that joins the take does not run. A line such as `uv run` runs
+a program, so the page gives it, and the take's command after it (`after`). A step of one commit has takes too.
 
 `--pages DIR` writes the pages of every walk of a class into DIR as walk-update lays them out in the walk repository:
 `walks/ID/` for the Markdown, `site/` for the first walk's website and `sites/ID/` for the others, and `walks/README.md`.
@@ -58,8 +59,10 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
+UPDATE_TIMEWALK = ("update timewalk to 1.4.4 or later: uvx --refresh-package timewalk --from git+https://github.com/rahuldave/timewalk "
+                   "timewalk-export --help")  # an old timewalk's facts: what to do
 MADE = "Made by the walk skill's render.py from the facts of the walk. Do not edit it by hand: run just walk-update again."
-FORMATS = (3,)  # the versions of the facts' layout that this script reads
+FORMATS = (4,)  # the versions of the facts' layout that this script reads: 4 from timewalk 1.4.4, with take and its after
 WAYS = {
     "watch": ("Read the tutorial", "read", "Each change explained, with the code to look at."),
     "do": ("Build it yourself", "build", "Every command to run and every change to make by hand, to make the project yourself."),
@@ -123,120 +126,48 @@ def of_mode(
     return [part for part in parts if part["mode"] in ("shared", mode)]
 
 
-EXACT = ("pyproject.toml", "uv.lock")  # the files that a uv command writes with today's versions, unless the walk's loose names them
-
-
-def exact(
-    facts: dict,  # The facts of a tutorial
-    path: str,  # A file of the project
-) -> bool:  # True for a pyproject.toml or a uv.lock that the walk's loose does not name, which git check compares line by line
-    """Say whether git check compares a file of uv exactly. timewalk matches a path against each glob of loose the same way."""
-    return path.rsplit("/", 1)[-1] in EXACT and not any(fnmatch.fnmatchcase(path, glob) for glob in facts["walk"].get("loose") or [])
-
-
-def runs_uv(
-    text: str,  # A do$ line
-) -> bool:  # True when a command of the line is uv, as in uv add x, or cd sub && uv add x
-    """Say whether a line of shell runs uv: its first word, or the first word after &&, ||, ;, | or a bracket, past any NAME=value."""
-    try:
-        lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        words = list(lexer)
-    except ValueError:
-        words = text.split()
-    start = True   # the next word begins a command, after any NAME=value
-    for word in words:
-        if set(word) <= set("&|;()"):
-            start = True
-        elif start and re.fullmatch(r"[A-Za-z_]\w*=.*", word, re.DOTALL):
-            continue
-        elif start:
-            if word == "uv":
-                return True
-            start = False
-    return False
-
-
-def taken(
-    facts: dict,  # The facts of a tutorial
-    makes: list[dict],  # The do$ lines of a move, in order, as parts with their text and writes, which a file's by counts in
-    files: list[dict],  # The files of the move
-) -> dict[int, tuple[list[int], list[dict]]]:  # For each do$ line that the student does not run: the lines that one command stands for, and the files to take
-    """Find the uv commands whose files a student takes from the project in place of running them. uv add, uv lock and
-    others write today's newest versions, and a walk without loose compares pyproject.toml and uv.lock line by line. A
-    do$ line counts when its first word is uv, and it writes a file of the move, a pyproject.toml or a uv.lock that loose
-    does not name. A later do$ line that writes a file that it writes, or that such a line writes, joins it: the project
-    has each file only as the move ends, so one command takes them all, at the first line, and the student runs none of
-    the lines. The first line gets the lines and every file that they write; each later line gets ([], [])."""
-    paths = {p for f in files for p in (f["path"], f["old_path"]) if p}
-
-    def wrote(at: int) -> set[str]:
-        writes = makes[at].get("writes")
-        if writes is None:   # facts made without running the do$ lines: the files whose last writer is the line
-            return {p for f in files if f["by"] == at for p in (f["path"], f["old_path"]) if p}
-        return set(writes) & paths
-
-    out: dict[int, tuple[list[int], list[dict]]] = {}
-    for at, part in enumerate(makes):
-        if at in out:
-            continue
-        mine = wrote(at)
-        if not runs_uv(part["text"]) or not any(exact(facts, f["path"]) and f["status"] != "deleted" and f["path"] in mine for f in files):
-            continue
-        group, grew = [at], True
-        while grew:   # until no later line writes a file of the group
-            grew = False
-            for later in range(at + 1, len(makes)):
-                if later not in group and later not in out and wrote(later) & mine:
-                    group.append(later)
-                    mine |= wrote(later)
-                    grew = True
-        group.sort()
-        out[at] = (group, [f for f in files if f["path"] in mine or f["old_path"] in mine])
-        for later in group[1:]:
-            out[later] = ([], [])
-    return out
-
-
-def git_path(
-    path: str,  # A file of the project, from the top
-) -> str:  # It for git restore, from the top of the project, quoted for the shell
-    """Quote a path for a git command. A path that git would read as a pattern or as magic gets :(top,literal)."""
-    return shlex.quote(path if not path.startswith(":") and not re.search(r"[*?\[\\]", path) else ":(top,literal)" + path)
-
-
 def take_lines(
-    texts: list[str],  # The do$ lines that the command stands for, as the author wrote them
-    files: list[dict],  # The files that they write, from taken
-    sha: str,  # The commit of the move
-    facts: dict,  # The facts of the walk
-) -> list[str]:  # What Build it yourself says in place of the command: why, and the command that takes the files
-    """Say which command the author ran, and give the command that takes its files from the move's commit and installs
-    the versions of its uv.lock, from the top of the project."""
-    kept = [f["path"] for f in files if f["status"] != "deleted"]
-    gone = [f["path"] for f in files if f["status"] == "deleted"] + [f["old_path"] for f in files if f["status"] == "renamed"]
-    command = f"git restore --source {sha[:12]} -- " + " ".join(git_path(path) for path in kept)
-    if gone:
-        command += " && rm -f -- " + " ".join(shlex.quote(path) for path in gone)
-    locks = [path for path in kept if path.rsplit("/", 1)[-1] == "uv.lock"]
-    sync = bool(locks)
-    for lock in locks:   # every group and every member of a workspace, as uv add --group and uv add --package install them
-        where = f" --directory {shlex.quote(lock.rsplit('/', 1)[0])}" if "/" in lock else ""
-        command += f" && uv sync{where} --locked --all-groups --all-packages"
+    take: dict,  # The take of a do$ line, from the facts, with at least one line
+    texts: list[str],  # The do$ lines of the change, in order, which the take's lines count in
+    text: str,  # The do$ line itself
+) -> list[str]:  # What Build it yourself says, with the command that takes the files from the project
+    """Say which uv command the author ran, why the student does not run it, or runs it and then takes its files, and give
+    the command that takes the files. The facts' take says it all: timewalk's rule finds the lines and the files."""
+    kept, gone, command = take["files"], take["deletes"], take["command"]
+    names = [texts[at] if at < len(texts) else text for at in take["lines"]]
+    sync = "uv sync" in command
 
     def listed(paths: list[str]) -> str:
-        names = [span(path) for path in paths]
-        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        spans = [span(path) for path in paths]
+        return spans[0] if len(spans) == 1 else ", ".join(spans[:-1]) + " and " + spans[-1]
 
-    strict = [path for path in kept if exact(facts, path)]
-    one = len(texts) == 1
-    said = (f"The author ran {', then '.join(span(text) for text in texts)} here. {'It writes' if one else 'They write'} {listed(kept)}"
+    each = "each file" if len(kept) > 1 else "the file"
+    takes = f"It takes {each} as the author has it from the project" + (", and installs exactly the versions that `uv.lock` names:" if sync else ":")
+    if take["after"]:
+        skipped = names[1:]
+        said = (f"{span(text)} runs a program, so run it. It also writes {listed(kept)}" + (f", and deletes {listed(gone)}." if gone else ".")
+                + " On a later day, uv can write newer versions of packages there than the author's, and then git check finds that your "
+                "files differ.")
+        if skipped:
+            one = len(skipped) == 1
+            said += (f" The author then ran {', then '.join(span(name) for name in skipped)}, which write{'s' if one else ''} the same "
+                     f"files, so do not run {'it' if one else 'them'}.")
+        said += f" After it, run this command from the top of the project. {takes}"
+        return ["", said, "", "```bash", command, "```", ""]
+    one = len(names) == 1
+    said = (f"The author ran {', then '.join(span(name) for name in names)} here. {'It writes' if one else 'They write'} {listed(kept)}"
             + (f", and delete{'s' if one else ''} {listed(gone)}." if gone else "."))
-    said += (f" On a later day, {'it' if one else 'a uv command'} can write newer versions of packages than the author's, and this walk "
-             f"compares {listed(strict)} exactly. So do not run {'it' if one else 'them'}. Run this command in {'its' if one else 'their'} "
-             f"place, from the top of the project. It takes {'each file' if len(kept) > 1 else 'the file'} as the author has it from the "
-             "project" + (", and installs exactly the versions that `uv.lock` names:" if sync else ":"))
+    said += (f" On a later day, {'it' if one else 'a uv command'} can write newer versions of packages than the author's, and then git "
+             f"check finds that your files differ. So do not run {'it' if one else 'them'}. Run this command in {'its' if one else 'their'} "
+             f"place, from the top of the project. {takes}")
     return ["", said, "", "```bash", command, "```", ""]
+
+
+def taken_files(
+    makes: list[dict],  # The do$ lines of a change, as parts of the facts
+) -> set[str]:  # The files that a take of Build it yourself takes from the project
+    """List the files that the facts' takes of a change take, which the student does not make by hand."""
+    return {path for part in makes for path in (part.get("take") or {}).get("files", [])}
 
 
 def outside_code(
@@ -312,8 +243,8 @@ class Page:
         What changed. In Build it yourself, a patch$ line also gives the command that applies the patch from GitHub."""
         known = {f["path"] for f in files}
         makes = [p for p in parts if p["kind"] == "command" and p["makes"]]   # the do$ lines, which a file's by counts in
-        took = taken(self.facts, makes, files) if self.mode == "do" else {}
-        took_paths = {f["path"] for _, found in took.values() for f in found}
+        texts = [p["text"] for p in makes]
+        took_paths = taken_files(makes) if self.mode == "do" else set()
         run: list[dict] = []   # commands one after another, written as one block
         given: set[str] = set()   # the files whose patch is given: a rename has two patch$ lines, its old path and its new, and one patch
 
@@ -336,12 +267,14 @@ class Page:
                     flush()
                     self.add("", f"This change came from running `{part['text']}`.", "")
                     continue
-                at = next((n for n, p in enumerate(makes) if p is part), None)
-                if at in took:   # a uv command that writes today's versions: the student takes the author's files
-                    group, found = took[at]
-                    if group:   # a later line of the group has nothing of its own: the first line's command took its files
+                take = part.get("take") if part["makes"] and self.mode == "do" else None
+                if take:   # a uv command that writes today's versions: the student takes the author's files, by the facts' take
+                    flush()
+                    if take["after"]:   # a program that the student runs, and then the take
+                        run.append(part)
                         flush()
-                        self.add(*take_lines([makes[n]["text"] for n in group], found, sha, self.facts))
+                    if take["lines"]:   # a later line that joins a take has nothing of its own: the take above took its files
+                        self.add(*take_lines(take, texts, part["text"]))
                     continue
                 if part["makes"]:   # a command that makes the change: a block of its own, apart from the checks
                     flush()
@@ -441,7 +374,7 @@ class Page:
             else:
                 words[item["path"]] = item
         commands = [p["text"] for p in makes]
-        took = {f["path"] for _, found in taken(self.facts, makes, files).values() for f in found} if self.mode == "do" else set()
+        took = taken_files(makes) if self.mode == "do" else set()
         self.add("", f"{'#' * level} What changed" + (f" {{#{anchor(move, 'what-changed')}}}" if self.site else ""), "")
         for found in files:
             path = found["path"]
@@ -584,7 +517,8 @@ def stop_page(
         page.add("", f"{before}[The code after it]({page.tree(stop['commit'])}).", "")
     else:
         items = [p for p in stop["parts"] if p["kind"] == "item"]
-        page.what_changed(top + 1, stop["name"], stop["files"], items, [], stop["commit"], stop["start"], first=not stop["start"])
+        makes = [p for p in stop["parts"] if p["kind"] == "command" and p["makes"]]   # a step of one commit: its own do$ lines
+        page.what_changed(top + 1, stop["name"], stop["files"], items, makes, stop["commit"], stop["start"], first=not stop["start"])
     for number, move in enumerate(stop["moves"]):
         level = top + 1
         heading = f"{'#' * level} {move['number']} {move['title']}".rstrip()
@@ -1352,8 +1286,14 @@ def load(
     """Read a facts file, and refuse a layout that this script does not know."""
     facts = json.loads(path.read_text(encoding="utf-8"))
     if facts.get("format") not in FORMATS:
-        raise SystemExit(f"render: {path} has the facts layout {facts.get('format')!r}, and this script reads {', '.join(map(str, FORMATS))}; "
-                         "update the walk skill")
+        newer = isinstance(facts.get("format"), int) and facts["format"] > max(FORMATS)
+        raise SystemExit(f"render: {path} has the facts layout {facts.get('format')!r}, from timewalk {facts.get('timewalk', '?')}, and this "
+                         f"script reads {', '.join(map(str, FORMATS))}; " + ("update the walk skill" if newer else UPDATE_TIMEWALK))
+    if facts["walk"]["kind"] == "tutorial":
+        parts = [p for stop in facts["stops"] for change in (stop, *stop["moves"]) for p in change["parts"] if p["kind"] == "command" and p["makes"]]
+        if any("take" not in p or (p["take"] and "after" not in p["take"]) for p in parts):
+            raise SystemExit(f"render: {path} gives a do$ line no take, as timewalk before 1.4.4 does, so Build it yourself would give a strict "
+                             f"walk's uv commands as they are; {UPDATE_TIMEWALK}")
     return facts
 
 
