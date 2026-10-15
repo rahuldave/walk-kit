@@ -107,7 +107,7 @@ bla-class/
 | `select` | A small walk: the steps, moves and ranges of moves that it takes out of a bigger walk, for example `["step-04", "step-05.3..step-05.6"]`. An entry can have a title. Give `steps` or `select`, not both. See [Small walks out of a big one](#small-walks-out-of-a-big-one) |
 | `intro` | A Markdown file about the walk. The page shows it at the first stop, and the pages that students read put it before the first part. See [The intro of a walk](#the-intro-of-a-walk) |
 | `shared` | A small tutorial with notes of its own: the notes of the big tutorial, where its include lines take the sections of its moves. Not with `select`, `steps` or `intro`. See [A small walk with notes of its own](#a-small-walk-with-notes-of-its-own) |
-| `loose` | In a tutorial: the files that do mode compares by the names of their packages, for example `["pyproject.toml", "uv.lock"]`. See [Files made with uv add](#files-made-with-uv-add) |
+| `loose` | In a tutorial: the files that do mode compares by the names of their packages, for example `["pyproject.toml", "uv.lock"]`. Without it, the walk is strict. See [Files made with uv add](#files-made-with-uv-add) |
 | `tags` | A glob for tags of its own, for example `"hooks-*"`. Give `steps` or `tags`, not both |
 | `setup` | `"manual"`, the only value: the learner runs `just setup` at each step |
 | `moves` | In a tutorial: `"do"` or `"watch"`, the mode it starts in |
@@ -306,7 +306,7 @@ These rules come from building timewalk-test. They hold for every walk.
 - **Make each move work alone.** After each move, its anchor commands give the result that the notes state.
 - **Give an important command that needs timewalk's own check a move of its own.** timewalk compares the
   learner's files with the commit of a move once for each move. **Your files match** works on the whole move.
-- **A move that runs `uv add` or `uv lock` needs `loose`.** Write the command as a `do$` line. See
+- **Write a move that runs `uv add` or `uv lock` as a `do$` line.** Then choose loose or strict. See
   [Files made with uv add](#files-made-with-uv-add).
 - **Let two or three less important commands share a move.** A shared command after their block checks
   them. See [How large to make a block](#how-large-to-make-a-block).
@@ -317,10 +317,27 @@ https://rahuldave.com/timewalk/authoring.html#checks-by-timewalk-come-once-for-e
 ### Files made with uv add
 
 `uv add` writes the newest version of a package into `pyproject.toml` and `uv.lock`. A learner who makes
-the move on a later day gets a newer version, and **Your files match** never comes. So a tutorial with
-moves that run `uv add` or `uv lock` writes each such command as a `do$` line in the shared text, for
-example `do$ uv add --group test pytest`. See [Write for both modes](#write-for-both-modes). It also sets
-this key in its table in `toc.toml`:
+the move on a later day gets a newer version. For example, the author's `uv add --dev ruff` wrote ruff 0.17.0, and
+the learner's writes ruff 0.17.1. Then the files differ from the move's files, and **Your files match** never comes.
+
+So a tutorial with moves that run `uv add` or `uv lock` writes each such command as a `do$` line in the shared
+text, for example `do$ uv add --group test pytest`. See [Write for both modes](#write-for-both-modes). The walk
+is then loose or strict. Its key `loose` in its table in `toc.toml` chooses:
+
+- **Loose.** `loose` names `pyproject.toml` and `uv.lock`. The learner runs the author's `uv add`, and gets the
+  newest versions. timewalk and `git check` compare the two files by the names of their packages, and not by
+  their versions.
+- **Strict.** `loose` does not name the two files, or the walk has no `loose`. timewalk and `git check` compare
+  the files line by line. So in Build it yourself, the learner does not run the `uv` command. The page says which
+  command the author ran. It gives one command in its place, for example
+  `git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked`. `git restore` takes each file
+  that the `uv` command wrote from the move's commit, as the author has it. `uv sync --locked` then installs
+  exactly the versions in that `uv.lock`, and does not change `uv.lock`. A `uv` command such as `uv init` writes
+  other files too, for example `.python-version`. The page takes them the same way, and says so. Read the
+  tutorial still says which command the author ran.
+
+Choose strict when the learner must have the author's exact versions. Choose loose when the learner
+should learn to run `uv add`. A loose walk sets this key:
 
 ```toml
 loose = ["pyproject.toml", "uv.lock"]
@@ -652,6 +669,10 @@ commands from the facts file:
 
 ### git check and loose
 
+A walk whose `loose` does not name `pyproject.toml` and `uv.lock` is strict. Its `git check` compares every file
+line by line, with `git diff --cached --stat`. Its Build it yourself takes the files of each `uv` command from the
+project. See [Files made with uv add](#files-made-with-uv-add).
+
 timewalk compares the files that a walk's `loose` names by the names of their packages. So a student who runs
 `uv add` a month later still matches. `git check` does the same, with the same rules:
 
@@ -747,8 +768,8 @@ forms of the notes become links on the pages:
 
 1. It runs `timewalk-export --json` for each walk of `toc.toml`. The command writes the facts file, a JSON file with
    the text, the commands, the items and the changed files of every part of the walk, without the private lines.
-   A walk that takes the same notes and the same part of the history as a walk before it, in another mode, gets
-   no pages of its own.
+   A walk can have the same notes, part of the history and `loose` as a walk before it, in another mode. It gets
+   no pages of its own. A walk that differs only by `loose` gets pages of its own.
 2. It refuses to go on if `timewalk-check` finds an error in a walk. Run `just check`, and fix the error.
 3. It renders every page with the walk skill's `scripts/render.py`, before it writes the first file.
 4. It writes the pages into the walk repository, and removes the pages of an earlier run that the walks no longer

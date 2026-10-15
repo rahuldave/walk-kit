@@ -364,6 +364,71 @@ class AfterPatch(Case):
         self.assertEqual(render.source_gaps(self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")[0]), [])
 
 
+class Strict(unittest.TestCase):
+    "A walk whose loose does not name pyproject.toml and uv.lock: the student takes a uv command's files in place of running it."
+
+    def page(
+        self,
+        loose: list[str],  # The walk's loose
+        command: str = "uv add --dev ruff",  # The do$ line
+        paths: tuple[str, ...] = ("pyproject.toml", "uv.lock"),  # The files that it writes, each by it
+        then: bool = False,  # A patch$ line of the first file after it
+    ) -> tuple[str, list[str]]:  # Build it yourself's text of the move, and the commands of its blocks
+        "Render one move whose do$ line writes the files."
+        import follow
+
+        parts = [{"kind": "command", "text": command, "makes": True, "mode": "shared", "track": "", "writes": list(paths)}]
+        parts += [{"kind": "patch", "mode": "shared", "path": paths[0]}] if then else []
+        files = [{"path": path, "old_path": None, "status": "modified", "added": 1, "removed": 1, "binary": False,
+                  "diff": "@@ -1 +1 @@\n-a\n+b\n", "names": {"added": [], "removed": [], "changed": []}, "by": 0,
+                  "patch": "@@ -1 +1 @@\n-a\n+b\n" if then else ""} for path in paths]
+        move = {"name": "step-01.1", "number": "1.1", "title": "ruff", "commit": "c" * 40, "parts": parts, "files": files}
+        stop = {"name": "step-01", "number": "1", "title": "One", "start": "a" * 40, "commit": "c" * 40, "parts": [], "files": files,
+                "moves": [move]}
+        facts = {"walk": {"kind": "tutorial", "loose": loose, "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
+                 "history": {}}
+        page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
+        return page, [c for block in follow.blocks_of(page) for c in block.commands]
+
+    def test_strict_takes_the_files(self) -> None:
+        "Without loose, the page gives git restore of the line's files and uv sync --locked, and not uv add."
+        page, commands = self.page([])
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked", commands)
+        self.assertNotIn("uv add --dev ruff", commands)
+        self.assertIn("The author ran `uv add --dev ruff` here.", page)
+
+    def test_loose_runs_the_command(self) -> None:
+        "With loose naming both files, the page gives uv add, as before."
+        page, commands = self.page(["pyproject.toml", "uv.lock"])
+        self.assertIn("uv add --dev ruff", commands)
+        self.assertNotIn("uv sync --locked", page)
+        self.assertNotIn("The author ran", page)
+
+    def test_every_file_of_the_line(self) -> None:
+        "uv init writes more than pyproject.toml: every file whose by is the line is taken, an odd path as a literal, and no uv sync without uv.lock."
+        _, commands = self.page([], "uv init --lib", ("pyproject.toml", ".python-version", "src/a[1].py"))
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml .python-version ':(top,literal)src/a[1].py'", commands)
+
+    def test_only_uv_commands(self) -> None:
+        "A do$ line that is not uv runs, even when it writes pyproject.toml."
+        _, commands = self.page([], "sed -i '' s/a/b/ pyproject.toml", ("pyproject.toml",))
+        self.assertIn("sed -i '' s/a/b/ pyproject.toml", commands)
+
+    def test_patch_after_it(self) -> None:
+        "A patch$ line of a file that the student took gives nothing to apply: the file has the change already."
+        page, commands = self.page([], then=True)
+        self.assertFalse([c for c in commands if c.startswith("git apply")], commands)
+        self.assertIn("nothing to apply", page)
+
+    def test_a_strict_walk_gets_pages(self) -> None:
+        "A walk that differs from another only by loose gets pages of its own."
+        with tempfile.TemporaryDirectory() as folder:
+            toc = Path(folder) / "toc.toml"
+            toc.write_text('[[walk]]\nid = "a"\nkind = "tutorial"\nfolder = "w"\nloose = ["uv.lock"]\n\n'
+                           '[[walk]]\nid = "b"\nkind = "tutorial"\nfolder = "w"\n')
+            self.assertEqual([entry["id"] for entry in render.page_walks(toc)], ["a", "b"])
+
+
 class WalkSites(unittest.TestCase):
     "The first walk's website lists the other walks, whose sites the Pages workflow puts at ID/ under it."
 

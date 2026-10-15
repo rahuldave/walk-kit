@@ -29,6 +29,11 @@ names gets a command that sets each value that the change sets, with tomlkit, an
 The values come from the project, from `--repo`, so the pages of such a walk need it. Dependencies and uv.lock change
 only through uv commands on do$ lines: `--check` and `--class` name a patch$ line that changes them.
 
+A tutorial whose `loose` does not name `pyproject.toml` or `uv.lock` is strict: git check compares them line by line. Run
+on a later day, a uv command such as `uv add` writes newer versions, so in Build it yourself the student does not run a
+do$ line of uv that writes them. The page says which command the author ran, and gives `git restore` of every file that
+the line writes, from the move's commit, then `uv sync --locked`, which installs exactly the versions of that uv.lock.
+
 `--pages DIR` writes the pages of every walk of a class into DIR as walk-update lays them out in the walk repository:
 `walks/ID/` for the Markdown, `site/` for the first walk's website and `sites/ID/` for the others, and `walks/README.md`.
 
@@ -116,6 +121,75 @@ def of_mode(
     return [part for part in parts if part["mode"] in ("shared", mode)]
 
 
+EXACT = ("pyproject.toml", "uv.lock")  # the files that a uv command writes with today's versions, unless the walk's loose names them
+
+
+def exact(
+    facts: dict,  # The facts of a tutorial
+    path: str,  # A file of the project
+) -> bool:  # True for a pyproject.toml or a uv.lock that the walk's loose does not name, which git check compares line by line
+    """Say whether git check compares a file of uv exactly. timewalk matches a path against each glob of loose the same way."""
+    return path.rsplit("/", 1)[-1] in EXACT and not any(fnmatch.fnmatchcase(path, glob) for glob in facts["walk"].get("loose") or [])
+
+
+def taken(
+    facts: dict,  # The facts of a tutorial
+    commands: list[str],  # The do$ lines of a move, in order, which a file's by counts in
+    files: list[dict],  # The files of the move
+) -> dict[int, list[dict]]:  # For each do$ line that the student does not run, the files that it writes, which the student takes
+    """Find the uv commands whose files a student takes from the project in place of running them. uv add, uv lock and
+    others write today's newest versions, and a walk without loose compares pyproject.toml and uv.lock line by line. A
+    do$ line counts when its first word is uv, and it is the last line of the move that writes a pyproject.toml or a uv.lock
+    that loose does not name. Its files are those whose by is that line, every one of them, so the student's files match."""
+    out: dict[int, list[dict]] = {}
+    for at, text in enumerate(commands):
+        try:
+            first = shlex.split(text)[:1]
+        except ValueError:
+            first = text.split()[:1]
+        mine = [f for f in files if f["by"] == at]
+        if first == ["uv"] and any(exact(facts, f["path"]) and f["status"] != "deleted" for f in mine):
+            out[at] = mine
+    return out
+
+
+def git_path(
+    path: str,  # A file of the project, from the top
+) -> str:  # It for git restore, from the top of the project, quoted for the shell
+    """Quote a path for a git command. A path that git would read as a pattern or as magic gets :(top,literal)."""
+    return shlex.quote(path if not path.startswith(":") and not re.search(r"[*?\[\\]", path) else ":(top,literal)" + path)
+
+
+def take_lines(
+    text: str,  # The do$ line, as the author wrote it
+    files: list[dict],  # The files that it writes, from taken
+    sha: str,  # The commit of the move
+    facts: dict,  # The facts of the walk
+) -> list[str]:  # What Build it yourself says in place of the command: why, and the command that takes the files
+    """Say which command the author ran, and give the command that takes its files from the move's commit and installs
+    the versions of its uv.lock, from the top of the project."""
+    kept = [f["path"] for f in files if f["status"] != "deleted"]
+    gone = [f["path"] for f in files if f["status"] == "deleted"] + [f["old_path"] for f in files if f["status"] == "renamed"]
+    command = f"git restore --source {sha[:12]} -- " + " ".join(git_path(path) for path in kept)
+    if gone:
+        command += " && rm -f -- " + " ".join(shlex.quote(path) for path in gone)
+    sync = "uv.lock" in kept
+    if sync:
+        command += " && uv sync --locked"
+
+    def listed(paths: list[str]) -> str:
+        names = [span(path) for path in paths]
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+    strict = [path for path in kept if exact(facts, path)]
+    said = f"The author ran {span(text)} here. It writes {listed(kept)}" + (f", and deletes {listed(gone)}." if gone else ".")
+    said += (f" On a later day, it can write newer versions of packages than the author's, and this walk compares {listed(strict)} "
+             "exactly. So do not run it. Run this command in its place, from the top of the project. It takes "
+             + ("each file" if len(kept) > 1 else "the file") + " as the author has it from the project"
+             + (", and installs exactly the versions that `uv.lock` names:" if sync else ":"))
+    return ["", said, "", "```bash", command, "```", ""]
+
+
 def outside_code(
     text: str,  # Markdown
 ) -> str:  # The same, with fenced code, code spans, links' addresses and HTML comments left out
@@ -188,6 +262,9 @@ class Page:
         """Write the author's text: prose as written, commands as code, and a patch$ line as a link to the file's diff under
         What changed. In Build it yourself, a patch$ line also gives the command that applies the patch from GitHub."""
         known = {f["path"] for f in files}
+        makes = [p for p in parts if p["kind"] == "command" and p["makes"]]   # the do$ lines, which a file's by counts in
+        took = taken(self.facts, [p["text"] for p in makes], files) if self.mode == "do" else {}
+        took_paths = {f["path"] for found in took.values() for f in found}
         run: list[dict] = []   # commands one after another, written as one block
         given: set[str] = set()   # the files whose patch is given: a rename has two patch$ lines, its old path and its new, and one patch
 
@@ -209,6 +286,11 @@ class Page:
                 if part["makes"] and self.mode == "watch":   # what made the change: to read, not to run
                     flush()
                     self.add("", f"This change came from running `{part['text']}`.", "")
+                    continue
+                at = next((n for n, p in enumerate(makes) if p is part), None)
+                if at in took:   # a uv command that writes today's versions: the student takes the author's files
+                    flush()
+                    self.add(*take_lines(part["text"], took[at], sha, self.facts))
                     continue
                 if part["makes"]:   # a command that makes the change: a block of its own, apart from the checks
                     flush()
@@ -234,6 +316,9 @@ class Page:
                 by = found["by"] if found else "patch"
                 if self.mode == "watch":
                     self.add("", f"A patch to {link}" + (f", which renames {span(old)}." if old else "."), "")
+                elif path in took_paths:   # the student took the file as the move's commit has it, with this change in it
+                    self.add("", f"The command above took {link} from the project with this change in it already, so there is "
+                             "nothing to apply.", "")
                 elif found and set_by_data(self.facts, found):   # a pyproject.toml that loose names: its values, set as data
                     edit = self.facts.get("toml_edits", {}).get(f"{sha}:{path}")
                     if edit is None:
@@ -304,6 +389,7 @@ class Page:
                 words[item["path"]] = {**was, "words": " ".join(ended(w) for w in (was["words"], item["words"]) if w.strip()), "show": was["show"] + item["show"]}
             else:
                 words[item["path"]] = item
+        took = {f["path"] for found in taken(self.facts, commands, files).values() for f in found} if self.mode == "do" else set()
         self.add("", f"{'#' * level} What changed" + (f" {{#{anchor(move, 'what-changed')}}}" if self.site else ""), "")
         for found in files:
             path = found["path"]
@@ -311,6 +397,8 @@ class Page:
             said = ended(item["words"]) if item and item["words"].strip() else (describe(found["names"]) + "." if describe(found["names"]) else "")
             link = "" if found["status"] == "deleted" else f" [The file]({self.blob(sha, path)})."
             source = f" It comes from {span(commands[found['by']])}." if isinstance(found["by"], int) and found["by"] < len(commands) else ""
+            if path in took:
+                source = f" It comes from {span(commands[found['by']])}, and you take it from the project."
             self.add(f"- <a id=\"{anchor(move, path)}\"></a>{span(path)}:" + (f" {said}" if said else "") + f" {counts(found)}.{source}{link}")
             for shown in item["show"] if item else []:
                 self.add(f"  - look at `{shown}`" if "`" not in shown else f"  - look at ``{shown}``")
@@ -328,6 +416,8 @@ class Page:
                 pass   # the project as it starts: the student has it, and makes nothing by hand
             elif self.mode == "do" and by == "patch":
                 summary, open_ = f"The patch to {path}", " open"
+            elif self.mode == "do" and found["path"] in took:
+                summary = f"The diff that <code>{escape(commands[by])}</code> makes in {path}, which you take from the project"
             elif self.mode == "do" and isinstance(by, int) and by < len(commands):
                 command = f"<code>{escape(commands[by])}</code>"
                 if found["patch"]:
@@ -931,13 +1021,14 @@ def our_words(
 def page_walks(
     source: Path,  # The class's toc.toml
 ) -> list[dict]:  # The walks that get pages, as toc.toml writes them
-    """Choose the walks that get pages: every walk but one that takes the same notes and the same part of the history as a
-    walk before it, which differs only in the mode it starts in."""
+    """Choose the walks that get pages: every walk but one that takes the same notes, the same part of the history and the
+    same loose as a walk before it, which differs only in the mode it starts in. loose changes git check, and whether a
+    student runs a uv command or takes its files."""
     import tomllib
 
     chosen, seen = [], set()
     for entry in tomllib.loads(source.read_text(encoding="utf-8")).get("walk", []):
-        key = json.dumps({k: entry.get(k) for k in ("kind", "notes", "folder", "shared", "select", "steps", "tags", "intro")}, sort_keys=True)
+        key = json.dumps({k: entry.get(k) for k in ("kind", "notes", "folder", "shared", "select", "steps", "tags", "intro", "loose")}, sort_keys=True)
         if key not in seen:
             seen.add(key)
             chosen.append(entry)

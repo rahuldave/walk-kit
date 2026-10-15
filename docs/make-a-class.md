@@ -69,6 +69,10 @@ later day gets newer versions, so `pyproject.toml` and `uv.lock` never match. So
 `loose`, and timewalk compares those files by the names of their packages, and not by their versions. The `git check`
 of the student pages compares them by the same rules.
 
+A tutorial without `loose` is strict, and compares the two files line by line. Its Build it yourself pages do not
+tell the learner to run the `uv` command. They give a command that takes the author's files from the project, and
+installs exactly the author's versions. See [Get the project, and git check](student-pages.md#get-the-project-and-git-check).
+
 A small walk can also have notes of its own, with lines such as `{{include step-02.1}}` that take move sections from
 the big tutorial. [Several walks](https://rahuldave.com/timewalk/walks.html) in timewalk's documentation lists every
 key.

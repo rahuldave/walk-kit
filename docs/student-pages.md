@@ -38,8 +38,27 @@ The same section adds a git alias, `git check`. After each move, the page gives 
 move. It runs `git add -A` in a copy of git's index, so a new file counts too. The student's own index does not
 change. It prints nothing when the student's files match.
 
-A student who runs `uv add` a month later gets newer packages, and the files no longer match. So a walk can name
-such files in its `loose` list in `toc.toml`, and `git check` then compares them as timewalk does:
+A student who runs `uv add` a month later gets newer packages, and the files no longer match. For example, the
+author's `uv add --dev ruff` wrote ruff 0.17.0, and the student's writes ruff 0.17.1. A walk handles this in one of
+two ways. Its `loose` list in `toc.toml` chooses.
+
+**Strict.** The walk's `loose` does not name `pyproject.toml` and `uv.lock`, or the walk has no `loose`. `git check`
+compares every file line by line. So the page does not tell the student to run a `uv` command that writes
+`pyproject.toml` or `uv.lock`, such as `uv add`, `uv remove` or `uv lock`. It says which command the author ran, and
+gives one command in its place:
+
+```bash
+git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked
+```
+
+`git restore` takes each file that the author's command wrote from the project, as the author has it after the
+move. `uv sync --locked` installs exactly the versions that this `uv.lock` names, and does not change it. A command
+such as `uv init` also writes other files, for example `.python-version`. The page takes them the same way, and
+says so. To find the files that each command writes, `timewalk-export --json` runs each `do$` line in a scratch
+copy of the project. The renderer reads the result from the JSON file that this command writes.
+
+**Loose.** The walk's `loose` names `pyproject.toml` and `uv.lock`. The student runs the author's `uv add`, and gets
+the newest versions. `git check` then compares these files as timewalk does:
 
 - `pyproject.toml` and `uv.lock` are compared by the names of their packages, and not by their versions. **Get the
   project** writes a small Python program, `package_names.py`, into the folder `.git`. It is a copy of timewalk's own

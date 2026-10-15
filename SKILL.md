@@ -197,8 +197,8 @@ cues included. To show a cue to students, start it with another word, for exampl
 - **Plan a tutorial's moves with its blocks.** timewalk checks the learner's files once for each move. So an
   important command that needs that check gets a move of its own. WALKS.md, in "How small to make a move" and
   "Write for both modes", says how. A command that makes a move, such as `uv add` or `chmod +x`, is a `do$` line in the
-  shared text, and never in a `do` block. A tutorial with moves that run `uv add` sets `loose`, as "Files made with
-  uv add" says.
+  shared text, and never in a `do` block. A tutorial with moves that run `uv add` is loose or strict, by its key
+  `loose`, as "Files made with uv add" says.
 - **Rehearse every command** of the notes in the replay copy, at its step or its move. Then put it into the notes.
 - **Every command runs through `uv run` or a `just` recipe,** never a bare `python`. Each step's notes start
   with `$ just setup`, which never touches git.
