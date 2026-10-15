@@ -23,6 +23,11 @@ through a link in ~/.cache/walk-kit/repos, because the model writes the path wit
 early step is not checked against later code. A text that passed is kept in a cache, so a second run of the same text
 costs nothing. The files are reviewed at the same time, and their results print in order.
 
+The presenter's private lines, which walk-update leaves out of the walk repository (see private.py: the `> Say:` and
+`> Note:` cues with their blockquote, and the `time:` lines), are not reviewed: no reader but the presenter sees them.
+The text sent to the model has an empty line in place of each, so the line numbers stay those of the file. A hunk of a
+diff that changes only private lines, and empty lines, is left out.
+
 A file is reviewed at most 3 times between two commits. Each review adds its findings to the file's report in
 reports/writing/ at the top of the class folder, at the file's path with .md added. The author writes `- Fixed: ...`
 under each finding that the author fixed. A finding left without one is for the owner of the class. The first two
@@ -42,7 +47,7 @@ import tempfile
 from pathlib import Path
 
 from common import TocError, toc_walks
-from private import fenced
+from private import MixedCue, fenced, private_lines, toml_cues
 
 from style import prose_files
 
@@ -276,14 +281,70 @@ def placed(
     return "\n".join(out)
 
 
+def hidden(
+    path: Path,  # The file, for its name in a message
+    text: str,  # Its text
+) -> set[int]:  # The number of each private line, from 1
+    """Find the lines that walk-update leaves out for students, as private.py finds them. Raises ReviewFailed for a cue
+    that walk-update refuses."""
+    try:
+        found = private_lines(text)
+    except MixedCue as mixed:
+        raise ReviewFailed(f"{path}: {mixed}. walk-update refuses it; put a blank line between the two cues") from None
+    if path.suffix.lower() == ".toml":   # a TOML comment such as # Say: goes to students as it is, so walk-update refuses it too
+        found += toml_cues(text)
+    return {at + 1 for at in found}
+
+
+def blank(
+    text: str,  # A file
+    private: set[int],  # Its private lines, from hidden
+) -> str:  # The same text, with each private line empty
+    "Empty the private lines of a text, and keep every other line at its number."
+    return "\n".join("" if number in private else line for number, line in enumerate(text.split("\n"), 1))
+
+
+def public_diff(
+    diff: str,  # A diff of one file, from git diff
+    old: set[int],  # The private lines of the file at the last commit, from hidden
+    new: set[int],  # The private lines of the file as it is now
+) -> str | None:  # The diff with each private line empty and each hunk that changes only private lines left out; None if no hunk is left
+    "Keep the private lines of a diff from the reviewer. A hunk whose other changed lines are all empty goes too."
+    head, hunks = [], []   # the lines before the first hunk; each hunk as its lines, and whether it changes a public line with words
+    before = after = 0   # the number of the next line of the old file and of the new file
+    for line in diff.split("\n"):
+        hunk = re.match(r"^@@ -(\d+)(?:,\d+)? \+(\d+)", line)
+        if hunk:
+            before, after = int(hunk.group(1)), int(hunk.group(2))
+            hunks.append([[line], False])
+        elif not hunks:
+            head.append(line)
+        elif line.startswith("-"):
+            hunks[-1][0].append("-" if before in old else line)
+            hunks[-1][1] |= before not in old and bool(line[1:].strip())
+            before += 1
+        elif line.startswith("+"):
+            hunks[-1][0].append("+" if after in new else line)
+            hunks[-1][1] |= after not in new and bool(line[1:].strip())
+            after += 1
+        elif line.startswith(" "):
+            hunks[-1][0].append(" " if after in new else line)
+            before, after = before + 1, after + 1
+        else:   # \ No newline at end of file, or the empty end of the diff
+            hunks[-1][0].append(line)
+    kept = [line for lines, public in hunks if public for line in lines]
+    return "\n".join(head + kept) if kept else None
+
+
 def text_of(
     path: Path,  # A file
     whole: bool,  # True for the whole file, False for its change since the last commit
     named: dict[str, tuple[str, str]] | None = None,  # The names of the file's walks, from walk_files; None for a file of no walk
     repo: Path | None = None,  # The project, by the path that the reviewer reads it at, from plain_path
 ) -> str | None:  # The text to review, with the file's name, and the commit of each of its sections; None if the file did not change
-    """Give a file's change since the last commit, or the whole file if git does not track it or if `whole` is set."""
+    """Give a file's change since the last commit, or the whole file if git does not track it or if `whole` is set, without its private lines."""
     whole_text = path.read_text(encoding="utf-8")
+    private = hidden(path, whole_text)
     found = sections(whole_text, named) if named and repo else []
     said = table(path, found, repo) + "\n" if found else ""
     if not whole:
@@ -293,8 +354,14 @@ def text_of(
             tracked = False
         if tracked:
             diff = git(path.parent, "diff", "-U4", "HEAD", "--", path.name)
+            if diff:
+                try:
+                    was = hidden(path, git(path.parent, "show", f"HEAD:./{path.name}"))
+                except subprocess.CalledProcessError:   # a file added to the index, not yet in a commit
+                    was = set()
+                diff = public_diff(diff, was, private)
             return f"{said}--- {path} (a diff: review the + lines) ---\n{placed(diff, found)}" if diff else None
-    return f"{said}--- {path} (the whole file) ---\n" + whole_text
+    return f"{said}--- {path} (the whole file) ---\n" + blank(whole_text, private)
 
 
 class ReviewFailed(Exception):

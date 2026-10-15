@@ -37,7 +37,9 @@ setup url="":
     set -euo pipefail
     export GIT_TERMINAL_PROMPT=0
     upstream_url="https://github.com/{{ upstream }}/{{ project }}.git"
+    fresh=0
     if [ ! -d repo/.git ]; then
+        fresh=1
         url="$1"
         if [ -z "$url" ]; then
             url="$upstream_url"
@@ -48,12 +50,16 @@ setup url="":
             fi
         fi
         echo "setup: cloning $url into repo/"
-        git clone --quiet "$url" repo
+        git clone --quiet "$url" repo || { echo "setup: could not clone $url. Check the network, and run just setup again" >&2; exit 1; }
     fi
     if ! git -C repo remote get-url upstream >/dev/null 2>&1; then
         git -C repo remote add upstream "$upstream_url"
     fi
-    git -C repo fetch --quiet --tags --force upstream
+    # With no network, a repo/ that is already here keeps the tags it has, and just present still opens it
+    if ! git -C repo fetch --quiet --tags --force upstream; then
+        if [ "$fresh" = 1 ]; then echo "setup: could not fetch the tags of the steps from GitHub. Check the network, and run just setup again" >&2; exit 1; fi
+        echo "setup: could not fetch from GitHub; using the tags you have" >&2
+    fi
     echo "setup: repo/ is $(git -C repo remote get-url origin), with $(git -C repo tag -l 'step-*' | wc -l | tr -d ' ') steps from {{ upstream }}/{{ project }}"
 
 # Make build/walk.pdf, or build/walk-ID.pdf for just pdf ID: the slides, one page each. BRAND=DIR gives it a brand

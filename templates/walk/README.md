@@ -40,7 +40,8 @@ just present
 
 `just present` runs `just setup` first. The first time, `just setup` clones @project@ into `repo/`. If you
 also forked @project@, it clones your fork, so that you can push your own work. Otherwise it clones
-`@upstream@/@project@`. Every time, it fetches the tags of the steps from `@upstream@/@project@`.
+`@upstream@/@project@`. Every time, it fetches the tags of the steps from `@upstream@/@project@`. With no network, a `repo/`
+that is already there keeps the tags that it has, and `just present` still opens the walk.
 
 timewalk then puts its replay copy in `worktree/`. The replay copy is a clone of `repo/` on the branch
 `timewalk/replay`, which timewalk moves from step to step. timewalk never writes to `repo/`. A `worktree/` that

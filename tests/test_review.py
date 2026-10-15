@@ -283,6 +283,80 @@ class PlainPath(unittest.TestCase):
         self.assertEqual(review.plain_path(self.repo).resolve(), self.repo.resolve())
 
 
+CUES = """# Notes
+
+## step-00 Where it starts
+
+The reader sees this line.
+
+> Note: the presenter alone reads this cue,
+and this line of its paragraph.
+
+time: 1:30
+
+> Try: run the tests.
+
+The end.
+"""
+
+
+class PrivateLines(unittest.TestCase):
+    "The reviewer never sees the presenter's private lines, the lines that walk-update leaves out for students."
+
+    def setUp(self) -> None:
+        self.scratch = tempfile.TemporaryDirectory()
+        self.folder = Path(self.scratch.name)
+        git(self.folder, "init", "-q", "-b", "main")
+        self.notes = self.folder / "notes.md"
+        self.notes.write_text(CUES)
+        git(self.folder, "add", "-A")
+        git(self.folder, "commit", "-q", "-m", "notes")
+
+    def tearDown(self) -> None:
+        self.scratch.cleanup()
+
+    def test_a_whole_file_has_an_empty_line_for_each_private_line(self) -> None:
+        text = review.text_of(self.notes, True)
+        body = text.split("(the whole file) ---\n", 1)[1]
+        self.assertNotIn("presenter", body)
+        self.assertNotIn("this line of its paragraph", body)
+        self.assertNotIn("time: 1:30", body)
+        self.assertIn("> Try: run the tests.", body)   # a public cue stays
+        self.assertEqual(body.split("\n"), [line if number not in (7, 8, 10) else "" for number, line in enumerate(CUES.split("\n"), 1)])
+
+    def test_a_hunk_of_private_lines_alone_is_left_out(self) -> None:
+        self.notes.write_text(CUES.replace("presenter alone reads", "presenter reads"))
+        self.assertIsNone(review.text_of(self.notes, False))
+        self.notes.write_text(CUES.replace("presenter alone reads", "presenter reads").replace("time: 1:30", "time: 2:00"))
+        self.assertIsNone(review.text_of(self.notes, False))
+        # A cue that goes, and so a - line that was private
+        self.notes.write_text(CUES.replace("> Note: the presenter alone reads this cue,\nand this line of its paragraph.\n\n", ""))
+        self.assertIsNone(review.text_of(self.notes, False))
+
+    def test_a_hunk_with_a_public_change_keeps_its_private_lines_empty(self) -> None:
+        self.notes.write_text(CUES.replace("The reader sees this line.", "The reader sees this new line.")
+                              .replace("presenter alone reads", "presenter reads"))
+        text = review.text_of(self.notes, False)
+        self.assertIn("+The reader sees this new line.", text)
+        self.assertNotIn("presenter", text)
+        self.assertIn("\n-\n+\n", text)   # the cue's old and new line, each empty
+        self.assertNotIn("1:30", text)
+
+    def test_a_cue_that_walk_update_refuses_fails_the_review(self) -> None:
+        self.notes.write_text(CUES.replace("and this line of its paragraph.", "> Try: this public cue."))
+        with self.assertRaisesRegex(review.ReviewFailed, "public cue"):
+            review.text_of(self.notes, True)
+
+
+class Prompt(unittest.TestCase):
+    "The reviewer's prompt, review/writing.md."
+
+    def test_the_reviewer_leaves_what_a_command_prints(self) -> None:
+        prompt = " ".join(review.PROMPT.read_text(encoding="utf-8").split())
+        self.assertIn("Never change or question what a command prints", prompt)
+        self.assertIn("follow.py --check-output", prompt)
+
+
 class StyleAll(unittest.TestCase):
     "style.py passes --all on to the review, which then reviews each file whole."
 

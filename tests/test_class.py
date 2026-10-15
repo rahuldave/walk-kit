@@ -303,6 +303,26 @@ class Class(unittest.TestCase):
         finally:
             shutil.rmtree(upstream)
 
+    def test_walk_setup_without_the_network(self) -> None:
+        env, walk = self.offline(), self.walk_clone("walk-no-network")
+        cut = {**env, "GIT_CONFIG_VALUE_0": "https://github.com/", "GIT_CONFIG_KEY_0": "url.https://offline.invalid/.insteadOf"}
+        # A first clone with no network fails, and says why
+        done = just(walk, "setup", env=cut)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("setup: could not clone https://github.com/o/tally.git. Check the network", done.stderr)
+        self.assertFalse((walk / "repo").exists())
+        # After one setup, a setup with no network keeps the tags of repo/, and goes on to just present
+        self.assertEqual(just(walk, "setup", env=env).returncode, 0)
+        done = just(walk, "setup", env=cut)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("setup: could not fetch from GitHub; using the tags you have", done.stderr)
+        self.assertIn("with 7 steps from o/tally", done.stdout)
+        # A path cloned with no network has the tags of the path, but not of GitHub: setup fails, and says why
+        path = self.walk_clone("walk-no-network-path")
+        done = just(path, "setup", str(self.repo), env=cut)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("setup: could not fetch the tags of the steps from GitHub", done.stderr)
+
     def test_walk_setup_clones_a_fork(self) -> None:
         env, walk = self.offline(), self.walk_clone("walk-fork")
         git(walk, "remote", "set-url", "origin", "git@github.com:me/tally-walk.git")

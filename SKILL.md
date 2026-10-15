@@ -89,7 +89,9 @@ under What changed. README.md says how a class made before `just style` gets the
   one model call with the page and the log, prompt `review/output.md`, report `reports/follow/ID-build.md`, written
   again at each run. A finding fails it, and there are no rounds. The log is `build/follow/ID.md`.
 - The writing review, `scripts/review.py`, uses the prompt `review/writing.md`, and reviews the files at the same
-  time. Its reports are in `reports/writing/`. A file fails at most 3 rounds between two commits.
+  time. Its reports are in `reports/writing/`. A file fails at most 3 rounds between two commits. It does not review
+  the private lines, which walk-update leaves out (`scripts/private.py`). It never changes what a command prints,
+  because only `follow.py --check-output` runs the commands.
 - In walk-kit itself, `just test` follows the Build it yourself pages of timewalk-test, and `just style` checks
   `README.md` and `templates/walk/README.md`.
 

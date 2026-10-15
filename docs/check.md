@@ -60,6 +60,14 @@ Before the text, the model gets a table that gives each section of the notes its
 the tag step-NN, and `### step-NN.k` the move's commit. A stop of a walk with notes of its own has the commits of its
 `{{include ...}}` lines. The model reads the files at that commit with `git show`, and may run no other command.
 
+The model never sees your own cues. walk-update leaves the lines `> Say:`, `> Note:` and `time: m:ss` out of the walk
+repository, so students never read them. The review leaves out the same lines. A change to those lines alone is not
+reviewed.
+
+The model cannot run a command, so it never changes what a command prints. For example, the notes say that
+`uv run ruff format --check` prints `5 files already formatted`. The model keeps the number 5. `just follow` runs
+the commands, and its model checks their output.
+
 The findings of each file go to `reports/writing/`, at the path of the file with `.md` added. Under each finding
 that you fix, write a line `- Fixed: ...`. A finding without that line is left for the owner of the class. A file is
 reviewed at most three times between two commits. The first two reviews fail on a finding. The third passes, and leaves its findings for you to judge.

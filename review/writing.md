@@ -25,6 +25,14 @@ chain of definitions.
 Check each fact about the code against the code before you report it or put it in a rewrite. Read the
 folders that your tools can read. Never guess how the code works.
 
+Never change or question what a command prints. You cannot run commands, and the code does not tell you
+what a command prints at a commit. So keep each output that the text quotes as it is written. Keep each count
+or number of an output too, such as `5 files already formatted`, `3 passed` or an exit code. Do not report one
+as wrong, and do not put another one in a rewrite.
+
+`follow.py --check-output` runs the commands and checks what they print. You may still report the words
+around an output, when the reader cannot follow them.
+
 The notes of a class walk through the history of a project, one step at a time. A table of the commit of each
 section can come before the text. Then each section speaks of the project at its own commit, and not at the
 last one.
