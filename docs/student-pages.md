@@ -48,14 +48,22 @@ compares every file line by line. So the page does not tell the student to run a
 gives one command in its place:
 
 ```bash
-git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked
+git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages
 ```
 
 `git restore` takes each file that the author's command wrote from the project, as the author has it after the
-move. `uv sync --locked` installs exactly the versions that this `uv.lock` names, and does not change it. A command
-such as `uv init` also writes other files, for example `.python-version`. The page takes them the same way, and
-says so. To find the files that each command writes, `timewalk-export --json` runs each `do$` line in a scratch
-copy of the project. The renderer reads the result from the JSON file that this command writes.
+move. `uv sync --locked` installs exactly the versions that this `uv.lock` names, and does not change it.
+
+`--all-groups` installs every group of dependencies, and `--all-packages` every package of a workspace, as the
+author's `uv add --group` and `uv add --package` do. Without them, `uv sync` installs only the default groups. For
+example, after the author's `uv add --group docs mdformat`, the student's `uv run mdformat` would fail.
+
+A command such as `uv init` also writes other files, for example `.python-version`. The page takes them the same
+way, and says so. A later command of the move can write one of these files, for example a `sed` that edits
+`pyproject.toml`. That command does not run either. The student takes the file as the move ends.
+
+To find the files that each command writes, `timewalk-export --json` runs each `do$` line in a scratch copy of the
+project. The renderer reads the result from the JSON file that this command writes.
 
 **Loose.** The walk's `loose` names `pyproject.toml` and `uv.lock`. The student runs the author's `uv add`, and gets
 the newest versions. `git check` then compares these files as timewalk does:

@@ -393,7 +393,7 @@ class Strict(unittest.TestCase):
     def test_strict_takes_the_files(self) -> None:
         "Without loose, the page gives git restore of the line's files and uv sync --locked, and not uv add."
         page, commands = self.page([])
-        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked", commands)
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages", commands)
         self.assertNotIn("uv add --dev ruff", commands)
         self.assertIn("The author ran `uv add --dev ruff` here.", page)
 
@@ -420,6 +420,62 @@ class Strict(unittest.TestCase):
         self.assertFalse([c for c in commands if c.startswith("git apply")], commands)
         self.assertIn("nothing to apply", page)
 
+    def lines(
+        self,
+        commands: list[tuple[str, list[str]]],  # Each do$ line, with the files that it writes, in order
+        files: dict[str, int],  # Each file of the move, with its by: the last line that writes it
+    ) -> tuple[str, list[str]]:  # Build it yourself's text of the move, and the commands of its blocks
+        "Render one strict move of several do$ lines."
+        import follow
+
+        parts = [{"kind": "command", "text": text, "makes": True, "mode": "shared", "track": "", "writes": writes} for text, writes in commands]
+        found = [{"path": path, "old_path": None, "status": "modified", "added": 1, "removed": 1, "binary": False,
+                  "diff": "@@ -1 +1 @@\n-a\n+b\n", "names": {"added": [], "removed": [], "changed": []}, "by": by, "patch": ""}
+                 for path, by in files.items()]
+        move = {"name": "step-01.1", "number": "1.1", "title": "uv", "commit": "c" * 40, "parts": parts, "files": found}
+        stop = {"name": "step-01", "number": "1", "title": "One", "start": "a" * 40, "commit": "c" * 40, "parts": [], "files": found,
+                "moves": [move]}
+        facts = {"walk": {"kind": "tutorial", "loose": [], "github": "https://github.com/o/demo"}, "observed": True, "stops": [stop],
+                 "history": {}}
+        page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
+        return page, [c for block in follow.blocks_of(page) for c in block.commands]
+
+    def test_two_uv_lines(self) -> None:
+        "Two uv lines that write the same files: one command takes them, and the student runs neither, not even the first."
+        both = ["pyproject.toml", "uv.lock"]
+        page, commands = self.lines([("uv add six", both), ("uv add --dev ruff", both)], {"pyproject.toml": 1, "uv.lock": 1})
+        self.assertEqual([c for c in commands if c.startswith(("uv", "git restore --source cccccccccccc -- "))],
+                         ["git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages"])
+        self.assertIn("The author ran `uv add six`, then `uv add --dev ruff` here. They write", page)
+
+    def test_a_later_line_writes_its_file(self) -> None:
+        "A sed after uv add changes pyproject.toml: the student takes both files as the move ends, and runs neither line."
+        page, commands = self.lines([("uv add six", ["pyproject.toml", "uv.lock"]), ("sed -i '' s/a/b/ pyproject.toml", ["pyproject.toml"]),
+                                     ("echo x > notes.txt", ["notes.txt"])], {"pyproject.toml": 1, "uv.lock": 0, "notes.txt": 2})
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages", commands)
+        self.assertFalse([c for c in commands if c.startswith(("sed", "uv add"))], commands)
+        self.assertIn("echo x > notes.txt", commands)
+
+    def test_a_line_between_joins(self) -> None:
+        "A line between that writes a file of a later line of the group joins it, so it does not change a file that is taken already."
+        _, commands = self.lines([("uv add six", ["pyproject.toml", "uv.lock"]), ("echo y > b.txt", ["b.txt"]),
+                                  ("cp pyproject.toml b.txt", ["b.txt", "pyproject.toml"])],
+                                 {"pyproject.toml": 2, "uv.lock": 0, "b.txt": 2})
+        self.assertIn("git restore --source cccccccccccc -- pyproject.toml uv.lock b.txt && uv sync --locked --all-groups --all-packages", commands)
+        self.assertFalse([c for c in commands if c.startswith(("echo", "cp"))], commands)
+
+    def test_a_lock_in_a_folder(self) -> None:
+        "The uv.lock of a project in a folder is synced in that folder."
+        _, commands = self.lines([("cd sub && uv add six", ["sub/pyproject.toml", "sub/uv.lock"])], {"sub/pyproject.toml": 0, "sub/uv.lock": 0})
+        self.assertIn("git restore --source cccccccccccc -- sub/pyproject.toml sub/uv.lock && uv sync --directory sub --locked --all-groups "
+                      "--all-packages", commands)
+
+    def test_runs_uv(self) -> None:
+        "A line runs uv when a command of it starts with uv, past NAME=value; uvx and a word uv given to echo do not count."
+        for text, runs in [("uv add x", True), ("cd a && uv add x", True), ("(uv lock)", True), ("A=1 uv lock", True),
+                           ("echo uv", False), ("uvx ruff", False), ("echo a=b uv", False)]:
+            self.assertEqual(render.runs_uv(text), runs, text)
+
     def test_a_strict_walk_gets_pages(self) -> None:
         "A walk that differs from another only by loose gets pages of its own."
         with tempfile.TemporaryDirectory() as folder:
@@ -427,6 +483,64 @@ class Strict(unittest.TestCase):
             toc.write_text('[[walk]]\nid = "a"\nkind = "tutorial"\nfolder = "w"\nloose = ["uv.lock"]\n\n'
                            '[[walk]]\nid = "b"\nkind = "tutorial"\nfolder = "w"\n')
             self.assertEqual([entry["id"] for entry in render.page_walks(toc)], ["a", "b"])
+
+
+class StrictUv(Case):
+    "A student follows a strict move with real uv: the page's command takes the files, installs them, and git check passes."
+
+    def follow(
+        self,
+        made: list[str],  # The author's commands of the move, run in the project
+        then: str,  # What the student runs after the move, which must work
+        setup: str = "true",  # A command for the project before the move, at its start
+    ) -> None:
+        "Make the move with uv, render its page, run its commands in a learner's clone as follow.py does, then run then."
+        if not shutil.which("uv"):
+            self.skipTest("uv is not installed")
+        import follow
+
+        sh(self.repo, f"uv init -q --name demo --author-from none . && uv lock -q && {setup}")
+        start = commit(self.repo, {}, "start")
+        before = set(sh(self.repo, "git ls-files").stdout.split())
+        for command in made:
+            sh(self.repo, command)
+        sha = commit(self.repo, {}, "move")
+        paths = sh(self.repo, f"git diff --name-only {start} {sha}").stdout.split()
+        parts = [{"kind": "command", "text": "; ".join(made), "makes": True, "mode": "shared", "track": "", "writes": paths}]
+        found = [{"path": path, "old_path": None, "status": "modified" if path in before else "added", "added": 1, "removed": 0,
+                  "binary": False, "diff": "", "names": {"added": [], "removed": [], "changed": []}, "by": 0, "patch": ""} for path in paths]
+        move = {"name": "step-01.1", "number": "1.1", "title": "uv", "commit": sha, "parts": parts, "files": found}
+        stop = {"name": "step-01", "number": "1", "title": "One", "start": start, "commit": sha, "parts": [], "files": found, "moves": [move]}
+        facts = facts_of([], [sha]) | {"observed": True, "stops": [stop], "history": {}}
+        page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
+        work = self.learner(facts, start)
+        sh(work, "uv sync -q")
+        for block in follow.blocks_of(page):
+            for command in block.commands:
+                self.assertFalse(command.startswith("uv add"), command)
+                sh(work, command)
+        self.assertEqual(sh(work, f"git check {sha}").stdout, "")
+        sh(work, then)
+
+    def test_a_group_then_its_tool(self) -> None:
+        "uv add --group docs mdformat, then uv run mdformat: uv sync --locked alone installs only the default groups, and mdformat is missing."
+        self.follow(["uv add -q --group docs mdformat"], "uv run mdformat --version")
+
+    def test_a_package_of_a_workspace(self) -> None:
+        "uv add --package to a member that the project does not depend on: uv sync --locked alone leaves the member out."
+        self.follow(["uv init -q --lib --author-from none packages/m", "uv add -q --package m six"], "uv run python -c 'import m, six'")
+
+    def test_remove(self) -> None:
+        "uv remove: the student's uv.lock and environment lose the package, as the author's do."
+        self.follow(["uv remove -q six"], "! uv run python -c 'import six'", "uv add -q six")
+
+    def test_version(self) -> None:
+        "uv version --bump writes the version into pyproject.toml and uv.lock."
+        self.follow(["uv version -q --bump minor"], "grep -q 'version = \"0.2.0\"' pyproject.toml")
+
+    def test_a_member(self) -> None:
+        "uv init of a member writes its files and the workspace's list in the top pyproject.toml, and the member's own pyproject.toml is exact."
+        self.follow(["uv init -q --lib --author-from none packages/m", "uv add -q ./packages/m"], "uv run python -c 'import m'")
 
 
 class WalkSites(unittest.TestCase):

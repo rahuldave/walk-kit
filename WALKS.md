@@ -330,11 +330,16 @@ is then loose or strict. Its key `loose` in its table in `toc.toml` chooses:
 - **Strict.** `loose` does not name the two files, or the walk has no `loose`. timewalk and `git check` compare
   the files line by line. So in Build it yourself, the learner does not run the `uv` command. The page says which
   command the author ran. It gives one command in its place, for example
-  `git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked`. `git restore` takes each file
-  that the `uv` command wrote from the move's commit, as the author has it. `uv sync --locked` then installs
-  exactly the versions in that `uv.lock`, and does not change `uv.lock`. A `uv` command such as `uv init` writes
-  other files too, for example `.python-version`. The page takes them the same way, and says so. Read the
-  tutorial still says which command the author ran.
+  `git restore --source 1a2b3c4d5e6f -- pyproject.toml uv.lock && uv sync --locked --all-groups --all-packages`.
+  `git restore` takes each file that the `uv` command wrote from the move's commit, as the author has it.
+  `uv sync --locked` then installs exactly the versions in that `uv.lock`, and does not change `uv.lock`.
+  `--all-groups` installs every group of dependencies, and `--all-packages` every package of a workspace. Without
+  them, `uv sync` installs only the default groups and the packages that the project depends on. For example,
+  after `uv add --group docs mdformat`, a later `uv run mdformat` would fail. A `uv` command such as `uv init`
+  writes other files too, for example `.python-version`. The page takes them the same way, and says so. A later
+  `do$` line of the move that writes one of these files, such as a `sed` that edits `pyproject.toml`, does not
+  run either. The command takes the file as the move ends. Read the tutorial still says which command the author
+  ran.
 
 Choose strict when the learner must have the author's exact versions. Choose loose when the learner
 should learn to run `uv add`. A loose walk sets this key:
