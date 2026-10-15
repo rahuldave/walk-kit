@@ -476,6 +476,18 @@ class Strict(unittest.TestCase):
                            ("echo uv", False), ("uvx ruff", False), ("echo a=b uv", False)]:
             self.assertEqual(render.runs_uv(text), runs, text)
 
+    def test_the_title_of_toc(self) -> None:
+        "timewalk-export gets the title that toc.toml gives the walk, so a strict walk on the tutorial's notes has a name of its own."
+        with tempfile.TemporaryDirectory() as folder:
+            toc = Path(folder) / "toc.toml"
+            toc.write_text('[[walk]]\nid = "a"\nkind = "tutorial"\nfolder = "w"\ntitle = "Exact"\n\n[[walk]]\nid = "b"\nkind = "tutorial"\nfolder = "w"\n')
+            for ident, wanted in (("a", ["--title", "Exact"]), ("b", [])):
+                with mock.patch.object(render.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "no")) as run:
+                    with self.assertRaises(render.PagesError):
+                        render.export(Path(folder), toc, ident, "https://github.com/o/demo", Path(folder))
+                args = run.call_args.args[0]
+                self.assertEqual(args[args.index("--github") + 2:], wanted)
+
     def test_a_strict_walk_gets_pages(self) -> None:
         "A walk that differs from another only by loose gets pages of its own."
         with tempfile.TemporaryDirectory() as folder:

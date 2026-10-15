@@ -1099,12 +1099,17 @@ def export(
     scratch: Path,  # A folder for the facts file
     timewalk: str | None = None,  # Where timewalk comes from (default: common.TIMEWALK)
 ) -> dict:  # The facts of the walk
-    """Get the facts of one walk from timewalk-export --json."""
+    """Get the facts of one walk from timewalk-export --json, with the title that toc.toml gives it, else its notes' heading."""
     from common import TIMEWALK, UVX
 
+    import tomllib
+
     out = scratch / f"{ident}.json"
+    # The title that toc.toml gives the walk, as timewalk's menu shows it: two walks on the same notes, one strict, then differ
+    entry = next((w for w in tomllib.loads(toc.read_text(encoding="utf-8")).get("walk", []) if w.get("id") == ident), {})
+    named = ["--title", entry["title"]] if isinstance(entry.get("title"), str) and entry["title"].strip() else []
     done = subprocess.run([*UVX, timewalk or TIMEWALK, "timewalk-export", str(repo), "--toc", str(toc), "--walk", ident, "--json", str(out),
-                           "--github", github], capture_output=True, text=True, check=False)
+                           "--github", github, *named], capture_output=True, text=True, check=False)
     if done.returncode:
         raise PagesError(f"timewalk-export --json failed for walk {ident}:\n{done.stderr.strip()}")
     return load(out)
