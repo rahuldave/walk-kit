@@ -797,6 +797,8 @@ def our_words(
         (move["name"], move["parts"]) for stop in facts["stops"] for move in stop["moves"]]
     places += [(stop["name"], [{"kind": "prose", "mode": "shared", "text": stop["title"]}]) for stop in facts["stops"]]
     places += [(move["name"], [{"kind": "prose", "mode": "shared", "text": move["title"]}]) for stop in facts["stops"] for move in stop["moves"]]
+    # the walk's title and description: the front page of the first walk's website lists every walk with them
+    places += [(f"the walk's {key}", [{"kind": "prose", "mode": "shared", "text": facts["walk"].get(key) or ""}]) for key in ("title", "description")]
     for where, parts in places:
         for part in parts:
             text = part.get("words", "") if part["kind"] == "item" else part.get("text", "") if part["kind"] == "prose" else ""

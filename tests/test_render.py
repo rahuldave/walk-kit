@@ -562,6 +562,13 @@ class OurWords(unittest.TestCase):
         self.assertEqual(render.OUR_WORDS.findall("run pre-commit, then the commit-msg hook, step-by-step"), [])
         self.assertEqual(render.OUR_WORDS.findall("see step-02, and the commit."), ["step", "commit"])
 
+    def test_description(self) -> None:
+        "The walk's description, which the first walk's website lists, is checked too."
+        facts = {"walk": {"title": "Only the tests", "description": "Three commits of tally"}, "intro": [], "stops": []}
+        found = render.our_words(facts)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("the walk's description", found[0])
+
 
 if __name__ == "__main__":
     unittest.main()
