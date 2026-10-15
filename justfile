@@ -21,15 +21,15 @@ test:
     #!/usr/bin/env bash
     set -euo pipefail
     source={{ quote(test_class) }}
-    test -d "$source/repo/.git" || { echo "test: $source/repo is missing; run just build in $source" >&2; exit 1; }
+    test -f "$source/history/build.py" || { echo "test: $source is not timewalk-test; set TIMEWALK_TEST" >&2; exit 1; }
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
     python3 -m unittest discover -s tests
-    # A copy of the class, so that a just build in timewalk-test during the run cannot change the pages under the checks
+    # timewalk-test as last committed, with its project built there: an edit in progress or a just build in timewalk-test
+    # during the run cannot change the pages under the checks
     class="$scratch/class"
-    mkdir "$class"
-    git clone -q --no-local "$source/repo" "$class/repo"
-    for name in toc.toml notes.md walks slides; do if [ -e "$source/$name" ]; then cp -R "$source/$name" "$class/"; fi; done
+    git clone -q --no-local "$source" "$class"
+    python3 "$class/history/build.py" "$class/repo" > /dev/null
     python3 scripts/render.py --class "$class" --repo "$class/repo" --github {{ quote(test_github) }} --pages "$scratch/pages" > /dev/null
     failed=0
     for page in "$scratch"/pages/walks/*/build.md; do

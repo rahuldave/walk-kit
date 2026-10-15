@@ -29,6 +29,9 @@ import walk_init
 from common import GITHUB, fill
 from private import PRIVATE, MixedCue, fenced, in_code, private_lines, public, toml_cues
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_review import copy_of_timewalk_test
+
 TIMEWALK_TEST = Path(os.environ.get("TIMEWALK_TEST", Path.home() / "Projects" / "timewalk-test")).expanduser()
 ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "GIT_TERMINAL_PROMPT": "0"}
@@ -77,8 +80,8 @@ def just(
 
 def tools() -> str | None:  # What is missing for the end-to-end tests, or None
     "Say what the end-to-end tests lack on this machine."
-    if not (TIMEWALK_TEST / "repo" / ".git").exists():
-        return f"{TIMEWALK_TEST}/repo is missing; run just build in timewalk-test"
+    if not (TIMEWALK_TEST / "history" / "build.py").exists():
+        return f"{TIMEWALK_TEST} is not timewalk-test; set TIMEWALK_TEST"
     missing = [tool for tool in ("git", "just", "uv", "uvx") if not shutil.which(tool)]
     return f"{', '.join(missing)} not on this machine" if missing else None
 
@@ -91,7 +94,9 @@ class Class(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.tmp = Path(tempfile.mkdtemp())
         cls.repo, cls.folder, cls.walk = cls.tmp / "tally", cls.tmp / "tally-class", cls.tmp / "tally-walk"
-        git(cls.tmp, "clone", "--quiet", str(TIMEWALK_TEST / "repo"), str(cls.repo))
+        (cls.tmp / "source").mkdir()
+        source = copy_of_timewalk_test(TIMEWALK_TEST, cls.tmp / "source")   # as last committed: no edit in progress reaches the test
+        git(cls.tmp, "clone", "--quiet", str(source / "repo"), str(cls.repo))
         # A gh that notes each call: the scripts must not run gh without a typed yes
         fake = cls.tmp / "bin"
         fake.mkdir()
@@ -107,9 +112,9 @@ class Class(unittest.TestCase):
         cls.walk_commits = git(cls.walk, "log", "--format=%H").split() if (cls.walk / ".git").is_dir() else []
         # The material of timewalk-test's 9 walks, in place of what class_init wrote
         for name in ("toc.toml", "notes.md"):
-            shutil.copy(TIMEWALK_TEST / name, cls.folder / name)
+            shutil.copy(source / name, cls.folder / name)
         for name in ("slides", "walks"):
-            shutil.copytree(TIMEWALK_TEST / name, cls.folder / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+            shutil.copytree(source / name, cls.folder / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
         cls.update = cls.walk_update("--repo", str(cls.repo))
         git(cls.walk, "add", "-A")
         git(cls.walk, "commit", "--quiet", "-m", "The walk, from the class notes")

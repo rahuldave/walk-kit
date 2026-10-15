@@ -393,15 +393,13 @@ def copy_of_timewalk_test(
     source: Path,  # A timewalk-test folder, with repo/, toc.toml, notes.md and walks/
     scratch: Path,  # A temporary folder
 ) -> Path:  # A copy of the class in the temporary folder: a clone of repo/ with every tag, and the notes
-    "Copy timewalk-test into a temporary folder, so that a test never reads the repository that `just build` there rewrites."
+    """Copy timewalk-test as it was last committed into a temporary folder, and build its project there with its own
+    history/build.py, so that a test never reads an edit in progress or the repository that `just build` there rewrites."""
     folder = scratch / "class"
-    folder.mkdir()
-    git(scratch, "clone", "-q", "--no-local", str(source / "repo"), str(folder / "repo"))
-    for name in ("toc.toml", "notes.md"):
-        shutil.copy(source / name, folder / name)
-    for name in ("walks", "slides"):
-        if (source / name).is_dir():
-            shutil.copytree(source / name, folder / name, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+    git(scratch, "clone", "-q", "--no-local", str(source), str(folder))
+    done = subprocess.run([sys.executable, str(folder / "history" / "build.py"), str(folder / "repo")], capture_output=True, text=True, check=False)
+    if done.returncode:
+        raise AssertionError(f"timewalk-test's history/build.py failed: {done.stdout}{done.stderr}")
     return folder
 
 
@@ -413,21 +411,25 @@ def missing() -> str:  # What TimewalkTest lacks on this machine, or ""
 
 
 class CopyOfTimewalkTest(unittest.TestCase):
-    "The copy keeps its commits when the class it came from is built again."
+    "The copy is timewalk-test as last committed, with its project built by its own history/build.py."
 
-    def test_a_rebuild_of_the_source_does_not_reach_the_copy(self) -> None:
+    def test_an_edit_in_progress_does_not_reach_the_copy(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             source = Path(scratch) / "source"
-            (source / "repo").mkdir(parents=True)
-            git(source / "repo", "init", "-q", "-b", "main")
-            first = commit(source / "repo", "one", "step-01", annotated=True)
-            (source / "toc.toml").write_text("")
-            (source / "notes.md").write_text("## step-01 One\n")
+            (source / "history").mkdir(parents=True)
+            (source / "history" / "build.py").write_text(
+                "import subprocess, sys\n"
+                "repo = sys.argv[1]\n"
+                "subprocess.run(['git', 'init', '-q', '-b', 'main', repo], check=True)\n"
+                "subprocess.run(['git', '-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'one'], check=True)\n")
+            (source / "toc.toml").write_text("# committed\n")
+            git(source, "init", "-q", "-b", "main")
+            git(source, "add", "-A")
+            git(source, "commit", "-q", "-m", "class")
+            (source / "toc.toml").write_text("# an edit in progress\n")   # as another agent's work, not committed
             copy = copy_of_timewalk_test(source, Path(scratch))
-            git(source / "repo", "commit", "-q", "--amend", "-m", "one, built again")   # as just build rewrites the history
-            git(source / "repo", "tag", "-f", "-a", "-m", "again", "step-01")
-            self.assertNotEqual(git(source / "repo", "rev-parse", "step-01^{commit}"), first)
-            self.assertEqual(git(copy / "repo", "rev-parse", "step-01^{commit}"), first)
+            self.assertEqual((copy / "toc.toml").read_text(), "# committed\n")
+            self.assertEqual(git(copy / "repo", "log", "--format=%s"), "one")
 
 
 @unittest.skipIf(missing(), missing())
