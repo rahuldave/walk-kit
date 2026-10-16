@@ -136,7 +136,7 @@ under What changed. README.md says how a class made before `just style` gets the
    It writes only into the walk repository.
    It refuses a `--walk` that is the class folder or the project by any spelling, or a worktree or a submodule. It also
    refuses a path of `toc.toml` with a `..`. It refuses a
-   walk repository with changes that are not committed.
+   walk repository with changes that are not committed, but those that it would write with the same bytes.
 
    It writes the walk repository's justfile, README.md, AGENTS.md, CLAUDE.md, .gitignore and Pages workflow again
    from the templates. It keeps a file that has an edit by hand, unless `--replace-edited` says otherwise. Before the commit, it checks every file that the commit

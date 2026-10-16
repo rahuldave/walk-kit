@@ -60,7 +60,10 @@ lines.
 
 `just walk-update` writes only into the walk repository. It stops, and writes nothing, in these cases:
 
-- the walk repository has changes that are not committed. The pages that `just pages` wrote do not count
+- the walk repository has changes that are not committed, which walk-update would not write as they are. A change
+  that this run writes with the same bytes does not count, such as the pages that `just pages` wrote, or the files
+  that an earlier `just walk-update --no-commit` left. walk-update first runs in a copy of the walk repository to
+  compare them
 - the walk repository is the class folder or the project, or lies inside or around either one
 - the `.git` of the walk repository is a file, a worktree or a submodule
 - a path in `toc.toml` is absolute, has a `..`, or would take the place of a file such as `README.md` or `repo/`

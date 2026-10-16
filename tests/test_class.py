@@ -291,7 +291,7 @@ class Class(unittest.TestCase):
     def test_a_theme_comes_and_goes(self) -> None:
         """A class's site.toml gives the walk repository the theme's files in site/_extensions/, through just pages and then
         walk-update. Without site.toml, the next run removes them, and the walk repository is as it was before the theme."""
-        theme = self.tmp / "theme-repo"
+        theme = self.tmp / "github" / "o" / "demo.git"   # o/demo, which git finds here instead of on GitHub
         (theme / "_extensions" / "demo").mkdir(parents=True)
         (theme / "_extensions" / "demo" / "smalldocs.yml").write_text("css: demo.css\n")
         (theme / "_extensions" / "demo" / "demo.css").write_text("body { color: red; }\n")
@@ -306,10 +306,12 @@ class Class(unittest.TestCase):
         before = files_of(clone)
 
         def update(*args: str) -> subprocess.CompletedProcess:
+            env = {**self.env, "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.{(self.tmp / 'github').as_uri()}/.insteadOf",
+                   "GIT_CONFIG_VALUE_0": "git@github.com:"}
             return script("walk_update.py", "--project", "tally", "--upstream", "o", "--toc", str(folder / "toc.toml"), "--walk", str(clone),
-                          "--repo", str(self.repo), *args, cwd=folder, env=self.env)
+                          "--repo", str(self.repo), *args, cwd=folder, env=env)
 
-        (folder / "site.toml").write_text(f'theme = "{theme.as_uri()}@v1"\n\n[smalldocs]\nreference-location = "margin"\n')
+        (folder / "site.toml").write_text('theme = "o/demo@v1"\n\n[smalldocs]\nreference-location = "margin"\n')
         for args in (["--pages-only"], []):   # just pages, then just walk-update over its uncommitted pages
             done = update(*args)
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -318,13 +320,86 @@ class Class(unittest.TestCase):
         self.assertIn('theme: "demo"', (clone / "site/_smalldocs.yml").read_text())
         git(clone, "add", "-A")
         git(clone, "commit", "--quiet", "-m", "The theme")
+        css = clone / "site/_extensions/demo/demo.css"
+        css.write_text("body { color: green; }\n")   # an edit by hand of a file of the theme
+        refused = update()
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        self.assertIn("site/_extensions/demo/demo.css", refused.stderr)
+        self.assertEqual(css.read_text(), "body { color: green; }\n")
+        git(clone, "checkout", "--quiet", "--", ".")
+        own = clone / "site/_extensions/mine.css"   # a file of the author's, committed, which a list edited by hand names
+        own.write_text("p { margin: 0; }\n")
+        git(clone, "add", "site/_extensions/mine.css")
+        git(clone, "commit", "--quiet", "-m", "A file of mine")
+        listed = clone / "site/_extensions/.walk-kit"
+        listed.write_text(listed.read_text() + "site/_extensions/mine.css\n")
         (folder / "site.toml").unlink()
         for args in (["--pages-only"], []):
             done = update(*args)
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertFalse((clone / "site" / "_extensions").exists())
+        self.assertEqual(own.read_text(), "p { margin: 0; }\n", "a file that the list of the last commit does not name stays")
+        own.unlink()
+        git(clone, "commit", "--quiet", "-am", "Not mine after all")
+        self.assertEqual([p for p in (clone / "site" / "_extensions").rglob("*") if p.is_file()], [], "no file of the theme is left")
         self.assertEqual(files_of(clone), before)
         self.assertFalse([name for name in files_of(folder) if "_extensions" in name or name.endswith(".source")], "nothing of the theme in the class")
+
+    def test_walk_update_twice_without_a_commit(self) -> None:
+        "A walk-update that commits nothing leaves the justfile as the template has it, and a second walk-update runs; an edit by hand still stops it."
+        clone = self.walk_clone("twice")
+        justfile = clone / "justfile"
+        older = git(KIT, "show", "HEAD:templates/walk/justfile")   # the walk repository of an older walk-kit, with no site recipe
+        if "\nsite *args:" in older:
+            self.skipTest("walk-kit's last commit has the site recipe: no older justfile to start from")
+        for key, value in VALUES.items():
+            older = older.replace(f"@{key}@", value)
+        justfile.write_text(older + "\n")
+        git(clone, "commit", "--quiet", "-am", "An older justfile")
+        (clone / "walk.md").write_text("# The notes of before toc.toml\n")   # the first run removes it, and the second must not mind
+        git(clone, "add", "walk.md")
+        git(clone, "commit", "--quiet", "-m", "walk.md of before")
+        (clone / "repo").mkdir()
+        os.mkfifo(clone / "repo" / "pipe")   # what the trial run leaves out of its copy
+        for _ in range(2):
+            done = self.walk_update("--repo", str(self.repo), "--no-commit", walk=clone)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse((clone / "walk.md").exists())
+        self.assertIn("\nsite *args:", justfile.read_text())
+        justfile.write_text(justfile.read_text() + "\n# mine\n")
+        refused = self.walk_update("--repo", str(self.repo), "--no-commit", walk=clone)
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        self.assertIn("justfile", refused.stderr)
+        self.assertNotIn("walk-update-", refused.stderr, "the walk repository's paths, and not the trial's copy")
+        git(clone, "checkout", "--quiet", "--", "justfile")
+        mine = clone / "mine.md"
+        mine.write_text(f"<!-- {render.MADE} -->\nMine.\n")   # the line of render.py, in a file of the author, staged
+        git(clone, "add", "mine.md")
+        refused = self.walk_update("--repo", str(self.repo), "--no-commit", walk=clone)
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        self.assertIn("staged", refused.stderr)
+        self.assertIn("mine.md", git(clone, "diff", "--cached", "--name-only"), "the author's staging stays")
+
+    def test_copies_left_by_no_commit(self) -> None:
+        "The notes that a walk-update --no-commit copied from the class stay uncommitted, and the next walk-update runs. A hand edit of the copy stops it."
+        folder = self.tmp / "notes-class"
+        shutil.copytree(self.folder, folder, ignore=shutil.ignore_patterns(".git"))
+        clone = self.walk_clone("notes-walk")
+        (folder / "notes.md").write_text((folder / "notes.md").read_text() + "\nA line for students.\n")
+
+        def update() -> subprocess.CompletedProcess:
+            return script("walk_update.py", "--project", "tally", "--upstream", "o", "--toc", str(folder / "toc.toml"), "--walk", str(clone),
+                          "--repo", str(self.repo), "--no-commit", cwd=folder, env=self.env)
+
+        for _ in range(2):
+            done = update()
+            self.assertEqual(done.returncode, 0, done.stderr)
+        copied = next(name for name in git(clone, "status", "--porcelain").split("\n") if name.endswith("notes.md"))[3:]
+        (clone / copied).write_text((clone / copied).read_text() + "\nMine.\n")
+        refused = update()
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        self.assertIn("would not write as they are", refused.stderr)
+        self.assertIn(copied, refused.stderr)
+        self.assertIn("Mine.", (clone / copied).read_text(), "nothing is written")
 
     def test_old_templates_replaced_hand_edits_kept(self) -> None:
         if not (KIT / ".git").exists():

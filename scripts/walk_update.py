@@ -44,6 +44,8 @@ repository with changes that are not committed is then allowed, since a second r
 """
 
 import argparse
+import contextlib
+import io
 import os
 import re
 import shlex
@@ -114,15 +116,14 @@ def main() -> int:  # The exit code
         return pages_only(args, walk)
     try:
         check_walk(args, walk)
-        clean(walk)
+        changed = clean(walk)
         args.upstream = upstream_of(args, walk)
         args.notices += class_notices(args)
         for name in FILES:  # every check of a path before the first write, so that a refusal leaves nothing half-written
             target(walk, walk / name, record=False)
         pages, stale_pages = plan_pages(args, walk)   # rendered before the first write, so that a refusal writes nothing
-        written = toc(args, walk) if args.toc else one(args, walk)
-        written += templates(args, walk)
-        written += write_pages(walk, pages, stale_pages)
+        same_writes(args, walk, pages, stale_pages, changed)
+        written = write_all(args, walk, pages, stale_pages)
     except (Refused, TocError) as refused:
         print(f"walk-update: {refused}", file=sys.stderr)
         return 2
@@ -190,24 +191,114 @@ def undo(
 
 def clean(
     walk: Path,  # The walk repository
-) -> None:
-    """Refuse a walk repository with changes that are not committed: walk-update would write over them, or commit them. A
-    page that render.py made, as just pages leaves it, is not such a change: walk-update writes it again."""
+) -> dict[str, bytes | None]:  # Each file with changes that are not committed, but a page of render.py: its bytes now, or None if it is gone
+    """List the changes that are not committed, and refuse a file that is gone and that walk-update did not make. A page
+    that render.py made, as just pages leaves it, is not such a change: walk-update writes it again. Nor is a page of
+    render.py, or a file of the theme, that just pages removed. same_writes judges the rest."""
     status = subprocess.run(["git", "-C", str(walk), "status", "--porcelain", "-z", "--untracked-files=all"], capture_output=True, text=True,
                             check=False)
     if status.returncode != 0:
         raise Refused(f"git cannot read the status of {walk}: {status.stderr.strip()}")
-    entries, changed = status.stdout.split("\0"), []
-    theme = theme_files(walk) | theme_files(walk, "HEAD")   # the theme's files that just pages wrote, or removed
+    staged = subprocess.run(["git", "-C", str(walk), "diff", "--cached", "--quiet"], capture_output=True, check=False)
+    if staged.returncode != 0:   # walk-update stages and commits what it writes: what was staged before would go with it
+        raise Refused(f"{walk} has changes staged with git add. Commit them, or unstage them with git -C {walk} reset, first")
+    entries, gone, changed = status.stdout.split("\0"), {}, {}
+    theme = theme_files(walk, "HEAD")   # the theme's files of the last commit, which just pages may have removed
+    pages = {path.relative_to(walk).as_posix() for pattern in render.PAGE_GLOBS for path in walk.glob(pattern)}   # where render.py writes
+    names = []
     while entries:
         entry = entries.pop(0)
+        if len(entry) > 3:
+            names.append(entry[3:])
         if len(entry) > 3 and set(entry[:2]) & {"R", "C"} and entries:  # a rename or a copy: its old path comes next, with no status
-            entries.pop(0)
-        if len(entry) > 3 and not made_page(walk / entry[3:]) and not made_and_gone(walk, entry[3:]) and entry[3:] not in theme:
-            changed.append(entry[3:])
-    if changed:
-        raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  "
-                      + "\n  ".join(changed))
+            names.append(entries.pop(0))
+    odd = []
+    for name in dict.fromkeys(names):
+        path = walk / name
+        if path.is_symlink() or path.is_dir():
+            odd.append(name)
+        elif not path.exists():
+            if not made_and_gone(walk, name) and name not in theme:
+                gone[name] = None   # same_writes takes it from the last commit, and asks whether this run removes it too
+        elif not (made_page(path) and name in pages):
+            changed[name] = path.read_bytes()
+    if odd:
+        raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  " + "\n  ".join(odd))
+    return {**changed, **gone}
+
+
+def write_all(
+    args: argparse.Namespace,  # The command line
+    walk: Path,  # The walk repository, resolved
+    pages: dict[Path, str | bytes],  # The pages to write, from plan_pages
+    stale: list[Path],  # The pages of an earlier run to remove
+) -> list[Path]:  # The files and folders written
+    "Write the walk repository: the notes and slides, the files that walk-init writes, and the pages."
+    written = toc(args, walk) if args.toc else one(args, walk)
+    written += templates(args, walk)
+    written += write_pages(walk, pages, stale)
+    return written
+
+
+def same_writes(
+    args: argparse.Namespace,  # The command line
+    walk: Path,  # The walk repository, resolved
+    pages: dict[Path, str | bytes],  # The pages to write, from plan_pages
+    stale: list[Path],  # The pages of an earlier run to remove
+    changed: dict[str, bytes | None],  # The changes that are not committed, as clean lists them: the bytes now, or None for a file gone
+) -> None:
+    """Refuse the changes that are not committed, but those that this run writes with the same bytes, such as an earlier
+    walk-update --no-commit, or just pages, left them. The run goes first in a copy of the walk repository, and nothing
+    is written here before it passes."""
+    def nfc(name: str) -> str:   # git status and toc.toml may spell an accent apart
+        return unicodedata.normalize("NFC", name)
+
+    pdf = re.compile(rf"{re.escape(args.project)}(?:-[^/]+)?\.pdf") if args.pdf else None   # pdfs() makes them again, after the trial
+    changed = {name: now for name, now in changed.items() if not (pdf and pdf.fullmatch(name))}
+    if not changed:
+        return
+    top = {name.casefold() for name in ("repo", "worktree", "build", ".git")}   # the clones, the replay copy and git: the trial writes none
+
+    def leave_out(folder: str, names: list[str]) -> list[str]:   # those, the built website, and what is not a file, a folder or a link
+        here = Path(folder)
+        return [name for name in names if (here == walk and name.casefold() in top) or (here == walk / "site" and name == "_site")
+                or not ((here / name).is_symlink() or (here / name).is_file() or (here / name).is_dir())]
+
+    with tempfile.TemporaryDirectory(prefix="walk-update-") as scratch:
+        copy = Path(scratch) / "walk"
+        shutil.copytree(walk, copy, symlinks=True, ignore=leave_out)
+        copy = copy.resolve()
+        for name, now in changed.items():   # a file that is gone goes back as committed, to see whether this run removes it too
+            if now is None:
+                shown = subprocess.run(["git", "-C", str(walk), "--literal-pathspecs", "cat-file", "-p", f"HEAD:{name}"], capture_output=True, check=False)
+                if shown.returncode == 0:
+                    (copy / name).parent.mkdir(parents=True, exist_ok=True)
+                    (copy / name).write_bytes(shown.stdout)
+        before = {name: (copy / name).read_bytes() if now is not None else None for name, now in changed.items()}   # as copied, a moment ago
+        trial = argparse.Namespace(**vars(args))
+        trial.kept, trial.notices = [], []
+        start = len(TOUCHED)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                write_all(trial, copy, {copy / path.relative_to(walk): text for path, text in pages.items()},
+                          [copy / path.relative_to(walk) for path in stale])
+            wrote = {nfc(path.relative_to(copy).as_posix()) for path in TOUCHED[start:]}
+        except Refused as refused:   # in the words of the walk repository, and not of the copy
+            raise Refused(str(refused).replace(str(copy), str(walk))) from None
+        finally:
+            del TOUCHED[start:]
+        kept = []
+        for name, now in sorted(before.items()):
+            after = copy / name
+            written = nfc(name) in wrote or any(nfc(name).startswith(folder + "/") for folder in wrote)
+            if now is None:
+                if after.exists() or after.is_symlink():   # this run would not remove it
+                    kept.append(name)
+            elif not written or not after.is_file() or after.is_symlink() or after.read_bytes() != now:
+                kept.append(name)
+    if kept:
+        raise Refused(f"{walk} has changes that are not committed, which walk-update would not write as they are. Commit or stash them in "
+                      "the walk repository first:\n  " + "\n  ".join(kept))
 
 
 def made_page(
@@ -231,6 +322,17 @@ def theme_files(
         shown = subprocess.run(["git", "-C", str(walk), "cat-file", "-p", f"{commit}:{render.THEME_LIST}"], capture_output=True, text=True, check=False)
         names = render.theme_list(shown.stdout if shown.returncode == 0 else None)
     return {name for name in names if render.in_extensions(walk, name)}   # the disk decides where a path goes, and not the list
+
+
+def owned_theme(
+    walk: Path,  # The walk repository
+) -> set[str]:  # The theme's files that walk-update may write over or remove
+    """List the theme's files that render.py wrote: those that the list on the disk names, and that the list of the last
+    commit names too, or that git does not track. A list edited by hand cannot name a file of the author's."""
+    known = subprocess.run(["git", "-C", str(walk), "ls-files", "-z"], capture_output=True, text=True, check=False)
+    tracked = set(known.stdout.split("\0")) if known.returncode == 0 else set()
+    committed = theme_files(walk, "HEAD")
+    return {name for name in theme_files(walk) if name in committed or name not in tracked}
 
 
 def made_and_gone(
@@ -347,9 +449,11 @@ def upstream_of(
     args: argparse.Namespace,  # The command line
     walk: Path,  # The walk repository, resolved
 ) -> str:  # The project's owner on GitHub: --upstream, or the one that the walk repository's justfile names
-    """Find the upstream owner that the walk repository's justfile and README name."""
+    """Find the upstream owner that the walk repository's justfile and README name: the justfile as last committed, so that an
+    edit that is not committed does not choose it."""
     justfile = walk / "justfile"
-    old = justfile.read_text(encoding="utf-8", errors="ignore") if justfile.is_file() else ""
+    shown = subprocess.run(["git", "-C", str(walk), "cat-file", "-p", "HEAD:justfile"], capture_output=True, text=True, check=False)
+    old = shown.stdout if shown.returncode == 0 else justfile.read_text(encoding="utf-8", errors="ignore") if justfile.is_file() else ""
     named = re.search(r'^upstream := "([^"]*)"', old, re.MULTILINE)
     upstream = args.upstream or (named.group(1) if named else "")
     if not re.fullmatch(r"[\w][\w.-]*", upstream):
@@ -597,7 +701,7 @@ def plan_pages(
         blocked = next((up for up in path.parents if within(up, walk) and up != walk and up.exists() and not up.is_dir()), None)
         if blocked:
             raise Refused(f"{blocked.relative_to(walk)} is a file where the pages need a folder. Move it away")
-        if path.is_dir() or (path.exists() and not made_page(path) and path.relative_to(walk).as_posix() not in theme_files(walk)):
+        if path.is_dir() or (path.exists() and not made_page(path) and path.relative_to(walk).as_posix() not in owned_theme(walk)):
             raise Refused(f"{path.relative_to(walk)} exists, and render.py did not make it. Move it away, or give the walk another id")
     return pages, old_pages(walk, pages)
 
@@ -612,7 +716,7 @@ def old_pages(
         for old in sorted(walk.glob(pattern)):
             if old not in pages and old.is_file() and not old.is_symlink() and render.MADE in old.read_text(encoding="utf-8", errors="replace"):
                 stale.append(target(walk, old, record=False))
-    for name in sorted(theme_files(walk)):   # the files of a theme that an earlier run wrote: a new ref, or no theme
+    for name in sorted(owned_theme(walk)):   # the files of a theme that an earlier run wrote, for a new ref or no theme
         old = walk / name
         if old not in pages and old.is_file() and not old.is_symlink() and old not in stale:
             stale.append(target(walk, old, record=False))
