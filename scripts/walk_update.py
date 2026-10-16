@@ -202,7 +202,7 @@ def clean(
         entry = entries.pop(0)
         if len(entry) > 3 and set(entry[:2]) & {"R", "C"} and entries:  # a rename or a copy: its old path comes next, with no status
             entries.pop(0)
-        if len(entry) > 3 and not made_page(walk / entry[3:]):
+        if len(entry) > 3 and not made_page(walk / entry[3:]) and not made_and_gone(walk, entry[3:]):
             changed.append(entry[3:])
     if changed:
         raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  "
@@ -216,6 +216,18 @@ def made_page(
     if path.is_symlink() or not path.is_file():
         return False
     return render.MADE in path.read_text(encoding="utf-8", errors="replace")
+
+
+def made_and_gone(
+    walk: Path,  # The walk repository
+    name: str,  # A path of it, as git status gives it
+) -> bool:  # True if the file is gone, and its last commit holds a page that render.py made, as just pages removes an old page
+    "Tell a page of render.py that just pages removed from any other file that is gone."
+    if (walk / name).exists() or (walk / name).is_symlink():
+        return False
+    found = subprocess.run(["git", "-C", str(walk), "cat-file", "-p", f"HEAD:{name}"], capture_output=True, check=False)
+    kind = subprocess.run(["git", "-C", str(walk), "ls-tree", "HEAD", "--", name], capture_output=True, text=True, check=False).stdout
+    return found.returncode == 0 and kind.startswith("100") and render.MADE.encode() in found.stdout   # a file, not a link
 
 
 def class_notices(

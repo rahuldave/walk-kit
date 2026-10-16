@@ -269,6 +269,25 @@ class Class(unittest.TestCase):
         self.assertFalse((clone / "sites" / "tests" / "read").exists())
         self.assertTrue((clone / "site" / "tests" / "index.qmd").is_file())
 
+    def test_walk_update_after_just_pages(self) -> None:
+        "just pages removes an old page of render.py and leaves it uncommitted; walk-update then runs. A file of the author that is gone still stops it."
+        clone = self.walk_clone("after-pages")
+        (clone / "sites" / "old").mkdir(parents=True)
+        (clone / "sites" / "old" / "index.qmd").write_text(f"<!-- {render.MADE} -->\n")
+        (clone / "mine.txt").write_text("Mine.\n")
+        git(clone, "add", "-A")
+        git(clone, "commit", "--quiet", "-m", "An old page, and a file of the author")
+        pages = self.walk_update("--repo", str(self.repo), "--pages-only", walk=clone)
+        self.assertEqual(pages.returncode, 0, pages.stderr)
+        self.assertFalse((clone / "sites" / "old" / "index.qmd").exists())
+        done = self.walk_update("--repo", str(self.repo), walk=clone)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        git(clone, "reset", "--quiet", "--hard")
+        (clone / "mine.txt").unlink()
+        refused = self.walk_update("--repo", str(self.repo), walk=clone)
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        self.assertIn("mine.txt", refused.stderr)
+
     def test_old_templates_replaced_hand_edits_kept(self) -> None:
         if not (KIT / ".git").exists():
             self.skipTest("walk-kit is not a git clone, so it knows no old template")
