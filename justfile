@@ -83,5 +83,5 @@ test-github walk=test_walk:
 
 # Build the website of walk-kit from docs/ with smalldocs, and serve it at http://127.0.0.1:8001
 docs:
-    uvx --from 'smalldocs>=0.1.5' smalldocs render docs
+    uvx --from 'smalldocs>=0.3.0' smalldocs render docs
     python3 -m http.server -d docs/_site -b 127.0.0.1 8001

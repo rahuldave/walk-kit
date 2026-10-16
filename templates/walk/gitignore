@@ -4,3 +4,5 @@
 /worktree/
 # Your own PDF, made by `just pdf`, goes into build/. The PDF that this repository ships is @project@.pdf, beside this file.
 /build/
+# The website as just site builds it, to look at on this machine. The Pages workflow builds its own.
+/site/_site/

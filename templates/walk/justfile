@@ -92,3 +92,7 @@ pdf id="":
     brand=()
     if [ -n "${BRAND:-}" ]; then test -e "$BRAND" || { echo "pdf: BRAND=$BRAND does not exist" >&2; exit 1; }; brand=(--brand "$BRAND"); fi
     uvx --refresh-package timewalk --from {{ quote(timewalk) }} timewalk-pdf "${source[@]}" ${brand[@]+"${brand[@]}"} -o "build/$name.pdf"
+
+# Build the website in site/ with smalldocs, serve it on this machine, and rebuild it on every change. The theme is in site/_extensions/
+site *args:
+    uvx --from 'smalldocs>=0.3.0' smalldocs preview site "$@"

@@ -16,7 +16,7 @@ PAGE is a page to read that render.py wrote: `walks/ID/read.md` for GitHub, or a
 3. **Every link resolves.** A link to another page, or to an anchor `#id`, finds that page and that id. An id is
    given once in a page. With `--github`, every link to github.com answers a HEAD request with 200, and every commit
    that a link names is in `--repo`.
-4. **The website builds.** smalldocs (`uvx --from 'smalldocs>=0.1.5' smalldocs render`) builds the website, one project
+4. **The website builds.** smalldocs (`uvx --from 'smalldocs>=0.3.0' smalldocs render`) builds the website, one project
    in `site/`, in a scratch copy, with no error and no warning: the first walk's pages at the top, and each other
    walk's at `ID/`. Every page of the walk that `_smalldocs.yml` lists is built, and every link of every built page of
    the walk resolves there, its id too.
@@ -45,9 +45,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render
-from common import NoAddress, project_url
+from common import SMALLDOCS, NoAddress, project_url
 
-SMALLDOCS = ["uvx", "--from", "smalldocs>=0.1.5", "smalldocs"]
 SHELL = {"bash", "sh", "shell", "console", ""}  # the fences whose lines a reader could run
 RUN = [
     (re.compile(r"\bgit check\b"), "a `git check`, which belongs to Build it yourself"),

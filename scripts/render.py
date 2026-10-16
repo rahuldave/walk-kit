@@ -83,8 +83,18 @@ CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
 SITE_TAKEN = {"read", "build", "index", "site_libs", "search.json"}  # names at the top of site/ and its built site: no other walk may have these ids
 SMALLDOCS_SKIPS = {"node_modules", "venv", "env", "renv", "site-packages", "__pycache__"}  # folders that smalldocs leaves out, as its SKIP_DIRS
-PAGE_GLOBS = ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*.css",
-              "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, and wrote before in sites/, for a later run to remove
+SITE_SETTINGS = "site.toml"  # beside toc.toml: the class's smalldocs theme, owner/repo@ref, and settings of its own for the website
+THEME_LIST = "site/_extensions/.walk-kit"  # the theme's files that render.py wrote, one path a line, for a later run to replace or remove
+# The settings that render.py writes in _smalldocs.yml: the class's own settings may add to them, but not change them
+OWN_SETTINGS = ("project", "website.title", "website.page-navigation", "website.search", "website.sidebar", "theme", "css", "toc",
+                "toc-depth", "code-copy", "from", "metadata-files", "format")
+# The names of smalldocs's own themes, which a theme of the class may not take
+BOOTSWATCH = {"cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal", "litera", "lumen", "lux", "materia", "minty", "morph", "pulse",
+              "quartz", "sandstone", "simplex", "sketchy", "slate", "solar", "spacelab", "superhero", "united", "vapor", "yeti", "zephyr",
+              "default", "bootstrap", "none"}
+THEME_MAX = 50 * 1024 * 1024  # the largest file of a theme, in bytes: GitHub refuses a push with a file over 100 MB
+PAGE_GLOBS = ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*/_metadata.yml", "site/*.css",
+              THEME_LIST, "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, and wrote before in sites/, for a later run to remove
 
 
 def slug(
@@ -885,12 +895,15 @@ def site_files(
     facts: dict,  # The facts of the walk
     others: list[dict] = (),  # For the first walk's site: the facts of each other walk of the class
     home: dict | None = None,  # For another walk's pages: the first walk, whose pages are one folder up
+    theme: str | None = None,  # The name of the class's smalldocs theme, in site/_extensions/; None for cosmo
+    settings: dict | None = None,  # The class's own smalldocs settings, from site.toml, which go in _settings.yml
 ) -> dict[str, str]:  # Each file of the website, by its path in site/; for another walk, by its path in site/ID/
     """Write the pages of a walk on the website: a front page that explains the ways of reading, and a page for each part
     in each way. The website is one smalldocs project in site/: the first walk's pages at the top, each other walk's in
     ID/, and one _smalldocs.yml with a sidebar for each walk, which the first walk's files hold."""
     files, sidebar = walk_site(facts, [f["walk"] for f in others], home)
-    if home:
+    if home:   # the tab of each page of the walk names the walk, and not the site, whose title is the first walk's
+        files["_metadata.yml"] = f"# {MADE}\ntitle-prefix: {json.dumps(facts['walk']['title'])}\n"
         return files
     title = facts["walk"]["title"]
     render = ["index.qmd", *(f"{WAYS[m][1]}/*.qmd" for m in ways(facts))]
@@ -904,13 +917,118 @@ def site_files(
     files["_smalldocs.yml"] = "\n".join([
         f"# {MADE}", "project:", "  type: website", "  output-dir: _site", f"  render: [{pages}]   # only these pages", "",
         "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", "  sidebar:",
-        *("  " + line for line in "\n".join(sidebars).split("\n")), "", "theme: cosmo", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
+        *("  " + line for line in "\n".join(sidebars).split("\n")), "", *(['metadata-files: ["_settings.yml"]   # the class\'s own settings'] if settings else []),
+        f"theme: {json.dumps(theme) if theme else 'cosmo'}", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
         "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens", ""])
     files["styles.css"] = (f"/* {MADE} */\n/* Inline code keeps the code font, without the shaded box and the colour the theme gives it. */\n"
                            "code:not(pre code) {\n  background-color: transparent !important;\n  color: inherit !important;\n"
                            "  padding: 0 !important;\n}\n/* What changed: the diffs fold, and open one at a time. */\n"
                            "details { margin: 0.5em 0; }\ndetails > summary { cursor: pointer; }\n")
+    if settings:
+        files["_settings.yml"] = f"# {MADE}\n" + json.dumps(settings, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     return files
+
+
+def site_settings(
+    toc: Path,  # The class's toc.toml
+) -> tuple[str | None, dict]:  # The theme's source, owner/repo@ref, or None; and the class's own smalldocs settings
+    """Read site.toml beside toc.toml: `theme = "owner/repo@ref"`, and a table [smalldocs] of settings for _smalldocs.yml.
+    A class without the file gets the website of no theme. It raises PagesError for a key it does not know, a theme
+    without a ref, or a setting that render.py writes itself."""
+    import tomllib
+
+    path = toc.parent / SITE_SETTINGS
+    if not path.is_file():
+        return None, {}
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        raise PagesError(f"{path}: is not valid TOML: {error}") from None
+    unknown = sorted(set(data) - {"theme", "smalldocs"})
+    if unknown:
+        raise PagesError(f"{path}: has {', '.join(unknown)}; it may have theme and a table [smalldocs]")
+    theme = data.get("theme")
+    if theme is not None and (not isinstance(theme, str) or not re.fullmatch(r"\S+@[^@\s:]+", theme)):
+        raise PagesError(f"{path}: theme must be a source and a ref, such as \"owner/repo@v1.0.0\", so that every run gets the same files")
+    # owner/repo on GitHub, or a git URL: a folder on this machine would put its path in the .source that students get
+    if theme is not None and not re.match(r"^(?:[\w.-]+/[\w.-]+@|[a-zA-Z][a-zA-Z0-9+.-]*://|[\w.-]+@[\w.-]+:)", theme):
+        raise PagesError(f"{path}: theme must be owner/repo@ref on GitHub, or a git URL with @ref, and not a folder of this machine")
+    settings = data.get("smalldocs", {})
+    if not isinstance(settings, dict):
+        raise PagesError(f"{path}: smalldocs must be a table, [smalldocs]")
+
+    def leaves(table: dict, above: str) -> list[str]:
+        return [found for key, value in table.items() for found in (leaves(value, f"{above}{key}.") if isinstance(value, dict) and value else [f"{above}{key}"])]
+
+    try:
+        json.dumps(settings, allow_nan=False)
+    except (TypeError, ValueError) as error:   # a date, or nan: _settings.yml holds what JSON holds
+        raise PagesError(f"{path}: [smalldocs] has a value that _settings.yml cannot hold ({error}); write it as a string") from None
+    for key in leaves(settings, ""):
+        own = next((o for o in OWN_SETTINGS if key == o or key.startswith(o + ".") or o.startswith(key + ".")), None)
+        if own:
+            raise PagesError(f"{path}: [smalldocs] sets {key}, and render.py writes {own} itself" +
+                             (": give the theme with theme = ..." if own == "theme" else ""))
+    return theme, settings
+
+
+def theme_files(
+    source: str,  # The theme's source, owner/repo@ref, as site.toml gives it
+    scratch: Path,  # A folder to add the theme in
+) -> tuple[str, dict[str, bytes]]:  # The theme's name, and each of its files by its path in the walk repository, site/_extensions/...
+    """Get the theme with smalldocs add, which writes each extension of the source, and a .source file that says where it
+    came from and at which commit. The source must have one smalldocs theme."""
+    from common import SMALLDOCS
+
+    root = scratch / "theme"
+    root.mkdir()
+    (root / "_smalldocs.yml").write_text("project:\n  type: website\n", encoding="utf-8")
+    # git over SSH asks nothing: a host it does not know, or a key with a passphrase, fails at once and says why
+    quiet = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes"}
+    done = subprocess.run([*SMALLDOCS, "add", source, "--dir", str(root), "--force"], capture_output=True, text=True, check=False,
+                          stdin=subprocess.DEVNULL, env=quiet)
+    if done.returncode:
+        raise PagesError(f"smalldocs add {source} failed:\n{(done.stdout + done.stderr).strip()}")
+    extensions = root / "_extensions"
+    # A theme, as smalldocs finds it: a folder one or two levels down with a smalldocs.yml; theme: takes the last name of the folder
+    names = sorted(spec.parent.relative_to(extensions).as_posix() for spec in [*extensions.glob("*/smalldocs.yml"), *extensions.glob("*/*/smalldocs.yml")])
+    if len(names) != 1:
+        raise PagesError(f"{source} has {len(names)} smalldocs themes{': ' + ', '.join(names) if names else ''}; give a source with one")
+    name = names[0].rsplit("/", 1)[-1]
+    if name in BOOTSWATCH:
+        raise PagesError(f"{source}: its theme {name} has the name of a theme of smalldocs itself; rename its folder in the theme's repository")
+    files = {}
+    for path in sorted(extensions.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if any(ord(c) < 32 or ord(c) == 127 for c in rel):   # a line of the list is one path
+            raise PagesError(f"{source}: the theme has a file whose name has a control character, such as a new line: {rel!r}")
+        if path.stat().st_size > THEME_MAX:
+            raise PagesError(f"{source}: {rel} is larger than {THEME_MAX // 1024 // 1024} MB, too large for the walk repository")
+        files[f"site/{rel}"] = path.read_bytes()
+    return name, files
+
+
+def theme_list(
+    text: str | None,  # The text of site/_extensions/.walk-kit, or None when there is none
+) -> set[str]:  # The paths of the theme's files that render.py wrote, if the file is render.py's
+    "Read the list of the theme's files that render.py wrote."
+    if not text or MADE not in text:
+        return set()
+    return {line for line in text.split("\n") if line.startswith("site/_extensions/") and not {"", ".", ".."} & set(line.split("/"))}
+
+
+def in_extensions(
+    root: Path,  # The walk repository, or the folder of the pages
+    name: str,  # A path of the theme's list, site/_extensions/...
+) -> bool:  # True if the path stays in site/_extensions/ of the root, with no symbolic link on the way
+    "Check a path of the theme's list before a write or a removal: the list names it, but the disk decides where it goes."
+    top = root / "site" / "_extensions"
+    path = root / name
+    if top.is_symlink() or any(up.is_symlink() for up in path.parents if top in [up, *up.parents]):
+        return False
+    return path.resolve().is_relative_to(top.resolve()) and path.resolve() != top.resolve()
 
 
 def walk_site(
@@ -1080,11 +1198,13 @@ def class_pages(
     timewalk: str | None = None,  # Where timewalk comes from (default: common.TIMEWALK)
 ) -> tuple[dict[str, str], int, int]:  # Each page by its path in the walk repository; the walks whose do$ lines did not run; the places with timewalk's words
     """Render the pages of every walk of a class that gets pages, as the walk repository holds them. walk-update and --pages
-    both write them. It raises PagesError for a walk that timewalk cannot export, or that has errors."""
+    both write them. It raises PagesError for a walk that timewalk cannot export, or that has errors. With a site.toml
+    beside toc.toml, the pages have its theme's files too, as bytes, and THEME_LIST names them."""
     owner, project = github.rstrip("/").removesuffix(".git").split("/")[-2:]
     site = f"https://{owner}.github.io/{project}-walk"
-    pages: dict[str, str] = {}
+    pages: dict[str, str | bytes] = {}
     listed, gaps, words, sites = [], 0, 0, []
+    source, settings = site_settings(toc)   # before the walks, so that a mistake in site.toml stops at once
     with tempfile.TemporaryDirectory() as scratch:
         for number, entry in enumerate(page_walks(toc)):
             ident = entry["id"]
@@ -1106,10 +1226,15 @@ def class_pages(
             sites.append(facts)
             on_github = ", ".join(f"[{WAYS[mode][0]}]({ident}/{WAYS[mode][1]}.md)" for mode in ways(facts))   # from walks/README.md
             listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
+        name = None
+        if source:
+            name, theme = theme_files(source, Path(scratch))
+            pages.update(theme)
+            pages[THEME_LIST] = f"# {MADE}\n" + "".join(f"{path}\n" for path in sorted(theme))
     for number, facts in enumerate(sites):   # one website in site/: the first walk's pages list the others, in ID/; each other links back
         folder = "site" if not number else f"site/{facts['walk']['id']}"
-        for name, text in site_files(facts, sites[1:] if not number else [], sites[0]["walk"] if number else None).items():
-            pages[f"{folder}/{name}"] = text
+        for file, text in site_files(facts, sites[1:] if not number else [], sites[0]["walk"] if number else None, name, settings).items():
+            pages[f"{folder}/{file}"] = text
     pages["walks/README.md"] = "\n".join([
         f"<!-- {MADE} -->", "", f"# The walks through {project}", "",
         ("Each walk is a set of pages. **Read the tutorial** explains each change, with the code to look at. **Build it yourself** "
@@ -1276,12 +1401,17 @@ def check_class(
 
 
 def write(
-    plan: list[tuple[Path, dict[str, str], list[str]]],  # For each folder: its files by path, and globs of the files an earlier run made
+    plan: list[tuple[Path, dict[str, str | bytes], list[str]]],  # For each folder: its files by path, and globs of the files an earlier run made
 ) -> list[str]:  # The paths written or removed
     """Write the files, replacing only files that this script made, and remove its own files that the walk no longer has.
     Every file is checked before the first is written, so a refusal writes nothing."""
-    def ours(path: Path) -> bool:
-        return MADE in path.read_text(encoding="utf-8", errors="replace")
+    def listed(folder: Path) -> set[str]:   # the theme's files that an earlier run wrote there, each one still in site/_extensions/
+        found = folder / THEME_LIST
+        names = theme_list(found.read_text(encoding="utf-8", errors="replace") if found.is_file() and not found.is_symlink() else None)
+        return {name for name in names if in_extensions(folder, name)}
+
+    def ours(path: Path, folder: Path) -> bool:
+        return path.relative_to(folder).as_posix() in listed(folder) or MADE in path.read_text(encoding="utf-8", errors="replace")
 
     stale = []
     for folder, files, globs in plan:
@@ -1290,21 +1420,27 @@ def write(
             blocked = next((up for up in target.parents if up.exists() and not up.is_dir()), None)
             if blocked:
                 raise SystemExit(f"render: {blocked} is a file where {target} needs a folder; move it away")
-            if target.is_dir() or (target.exists() and not ours(target)):
+            if target.is_dir() or (target.exists() and not ours(target, folder)):
                 raise SystemExit(f"render: {target} exists, and render.py did not make it; move it away, or write to another folder")
         for pattern in globs:
-            stale += [old for old in sorted(folder.glob(pattern)) if old.relative_to(folder).as_posix() not in files and old.is_file() and ours(old)]
+            stale += [old for old in sorted(folder.glob(pattern)) if old.relative_to(folder).as_posix() not in files and old.is_file() and ours(old, folder)]
+        stale += [folder / old for old in sorted(listed(folder)) if old not in files and (folder / old).is_file() and not (folder / old).is_symlink()]
     done = []
     for folder, files, _ in plan:
         for path, text in files.items():
             target = folder / path
             target.parent.mkdir(parents=True, exist_ok=True)
-            if not target.exists() or target.read_text(encoding="utf-8") != text:
-                target.write_text(text, encoding="utf-8")
+            data = text.encode("utf-8") if isinstance(text, str) else text
+            if not target.exists() or target.read_bytes() != data:
+                target.write_bytes(data)
                 done.append(str(target))
-    for old in stale:
+    for old in dict.fromkeys(stale):
         old.unlink()
         done.append(f"{old} (removed)")
+    for folder, _, _ in plan:   # a folder of the theme that held only its old files
+        for up in sorted({p for old in stale for p in old.parents if (folder / "site" / "_extensions") in [p, *p.parents]}, key=lambda p: -len(p.parts)):
+            if up.is_dir() and not up.is_symlink() and not any(up.iterdir()):
+                up.rmdir()
     return done
 
 

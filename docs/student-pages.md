@@ -108,12 +108,27 @@ by its old path gets the command for the new path, which renames the file.
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
 | `site/` | The website, with the pages of the first walk at the top |
 | `site/ID/` | The pages of each other walk on the website |
+| `site/_extensions/` | The theme of the website, when the class has one |
 | `.github/workflows/pages.yml` | The workflow that builds the website with smalldocs, and publishes it on GitHub Pages |
 
 GitHub Pages publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
 `https://OWNER.github.io/bla-walk/ID/`. An owner with a custom domain gets that domain in place of `OWNER.github.io`.
 Do not edit a page by hand, because the next `just walk-update` makes it
 again. Edit the notes in the class folder.
+
+A class can give the website a smalldocs theme with a file `site.toml` beside `toc.toml`. `theme` names the git
+repository of the theme and a tag, and a table `[smalldocs]` holds settings that the theme needs:
+
+```toml
+theme = "owner/smalldocs-theme@v1.0.0"
+
+[smalldocs]
+reference-location = "margin"
+```
+
+The theme's files then go into `site/_extensions/` of `bla-walk`, and are committed with the pages, so the workflow
+needs no access to the repository of the theme. Without `site.toml`, the website has the theme that it has today.
+In `bla-walk`, `just site` builds the website and serves it on your machine.
 
 The pages need `toc.toml`. A class with only `notes.md` gets no pages. To get them, give the class a `toc.toml` with
 one walk.

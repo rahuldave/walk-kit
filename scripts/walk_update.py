@@ -198,11 +198,12 @@ def clean(
     if status.returncode != 0:
         raise Refused(f"git cannot read the status of {walk}: {status.stderr.strip()}")
     entries, changed = status.stdout.split("\0"), []
+    theme = theme_files(walk) | theme_files(walk, "HEAD")   # the theme's files that just pages wrote, or removed
     while entries:
         entry = entries.pop(0)
         if len(entry) > 3 and set(entry[:2]) & {"R", "C"} and entries:  # a rename or a copy: its old path comes next, with no status
             entries.pop(0)
-        if len(entry) > 3 and not made_page(walk / entry[3:]) and not made_and_gone(walk, entry[3:]):
+        if len(entry) > 3 and not made_page(walk / entry[3:]) and not made_and_gone(walk, entry[3:]) and entry[3:] not in theme:
             changed.append(entry[3:])
     if changed:
         raise Refused(f"{walk} has changes that are not committed. Commit or stash them in the walk repository first:\n  "
@@ -216,6 +217,20 @@ def made_page(
     if path.is_symlink() or not path.is_file():
         return False
     return render.MADE in path.read_text(encoding="utf-8", errors="replace")
+
+
+def theme_files(
+    walk: Path,  # The walk repository
+    commit: str | None = None,  # A commit to read the list from, such as HEAD; None for the file on the disk
+) -> set[str]:  # The theme's files that render.py wrote, by their paths in the walk repository, as its list names them
+    "Read the list of the theme's files that render.py wrote, site/_extensions/.walk-kit, on the disk or in a commit."
+    if commit is None:
+        found = walk / render.THEME_LIST
+        names = render.theme_list(found.read_text(encoding="utf-8", errors="replace") if found.is_file() and not found.is_symlink() else None)
+    else:
+        shown = subprocess.run(["git", "-C", str(walk), "cat-file", "-p", f"{commit}:{render.THEME_LIST}"], capture_output=True, text=True, check=False)
+        names = render.theme_list(shown.stdout if shown.returncode == 0 else None)
+    return {name for name in names if render.in_extensions(walk, name)}   # the disk decides where a path goes, and not the list
 
 
 def made_and_gone(
@@ -582,7 +597,7 @@ def plan_pages(
         blocked = next((up for up in path.parents if within(up, walk) and up != walk and up.exists() and not up.is_dir()), None)
         if blocked:
             raise Refused(f"{blocked.relative_to(walk)} is a file where the pages need a folder. Move it away")
-        if path.is_dir() or (path.exists() and render.MADE not in path.read_text(encoding="utf-8", errors="replace")):
+        if path.is_dir() or (path.exists() and not made_page(path) and path.relative_to(walk).as_posix() not in theme_files(walk)):
             raise Refused(f"{path.relative_to(walk)} exists, and render.py did not make it. Move it away, or give the walk another id")
     return pages, old_pages(walk, pages)
 
@@ -597,12 +612,16 @@ def old_pages(
         for old in sorted(walk.glob(pattern)):
             if old not in pages and old.is_file() and not old.is_symlink() and render.MADE in old.read_text(encoding="utf-8", errors="replace"):
                 stale.append(target(walk, old, record=False))
+    for name in sorted(theme_files(walk)):   # the files of a theme that an earlier run wrote: a new ref, or no theme
+        old = walk / name
+        if old not in pages and old.is_file() and not old.is_symlink() and old not in stale:
+            stale.append(target(walk, old, record=False))
     return stale
 
 
 def write_pages(
     walk: Path,  # The walk repository, resolved
-    pages: dict[Path, str],  # The pages to write
+    pages: dict[Path, str | bytes],  # The pages to write: text, or the bytes of a theme's file
     stale: list[Path],  # The pages of an earlier run that the walks no longer have
 ) -> list[Path]:  # The files written
     """Write the pages that plan_pages rendered, and remove its own old pages."""

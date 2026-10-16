@@ -807,6 +807,33 @@ Nor can it have an id that starts with `_`, or one of `env`, `venv`, `renv`, `no
 A `just walk-update` removes the pages that an earlier one wrote in `sites/ID/`, where each other walk had a website
 of its own.
 
+### A theme for the website
+
+A class can give its website a smalldocs theme, so that it looks like the course. Put a file `site.toml` beside
+`toc.toml` in the class folder:
+
+```toml
+theme = "owner/smalldocs-theme@v1.0.0"
+
+[smalldocs]
+reference-location = "margin"
+```
+
+- `theme` is the git repository of the theme and a ref, such as a tag. `owner/repo` is on GitHub, and git
+  fetches it over SSH, so a private repository works when your SSH key can read it. The ref is required, so that
+  every run gets the same files. The repository must have one smalldocs theme in `_extensions/`.
+- `[smalldocs]` holds settings for `_smalldocs.yml`, such as a navbar that the theme needs. They go in
+  `site/_settings.yml`, which `_smalldocs.yml` names in `metadata-files`. They may add settings, but not change
+  the settings that `render.py` writes itself, such as `website.sidebar` or `theme`. `render.py` refuses such a
+  setting.
+
+`just pages` and `just walk-update` run `smalldocs add` in a temporary folder, and write the theme into
+`site/_extensions/NAME/` of the walk repository, with the `.source` file that says where it came from and at which
+commit. The workflow of GitHub Pages cannot clone a private repository, so the theme is committed with the pages.
+`site/_extensions/.walk-kit` lists the theme's files. A new ref replaces them. A class without `site.toml` gets the
+website of no theme, and the next `just walk-update` removes the theme's files. The class folder and walk-kit get
+no file of the theme. `just site` in the walk repository builds the website and serves it on your machine.
+
 ### Turn on GitHub Pages
 
 On each push to `main`, the workflow builds `site/` with smalldocs. GitHub Pages then

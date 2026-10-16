@@ -683,7 +683,7 @@ class WalkSites(unittest.TestCase):
         walks["second"]["stops"] = [{"name": "step-01", "number": "1", "title": "One", "moves": [], "parts": [], "commit": "0" * 40}]
         with mock.patch.object(render, "stop_page", lambda *args: ["Text."]):
             pages = self.pages(walks)
-        self.assertEqual([name for name in pages if name.endswith(".yml")], ["site/_smalldocs.yml"])
+        self.assertEqual([name for name in pages if name.endswith(".yml")], ["site/_smalldocs.yml", "site/second/_metadata.yml"])
         self.assertEqual([name for name in pages if name.endswith(".css")], ["site/styles.css"])
         self.assertFalse(any(name.startswith("sites/") for name in pages))
         self.assertIn("site/second/read/step-01.qmd", pages)
@@ -718,6 +718,135 @@ class WalkSites(unittest.TestCase):
         for ident in ("second", "third"):
             self.assertIn("[The first](../)", pages[f"site/{ident}/index.qmd"])
             self.assertNotIn("The other walks", pages[f"site/{ident}/index.qmd"])
+
+
+class Themes(unittest.TestCase):
+    "site.toml beside toc.toml gives the website a smalldocs theme, from a git repository at a ref, and settings of the class's own."
+
+    def setUp(self) -> None:
+        "Make a class folder, a theme in a git repository with tags v1 and v2, and the facts of two walks."
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.toc = self.tmp / "class" / "toc.toml"
+        self.toc.parent.mkdir()
+        self.toc.write_text("")
+        theme = self.tmp / "theme"
+        (theme / "_extensions" / "demo" / "fonts").mkdir(parents=True)
+        def run(*args: str) -> None:
+            subprocess.run(["git", "-C", str(theme), *args], check=True, capture_output=True)
+
+        run("init", "-q", "-b", "main")
+        for tag, colour in (("v1", "red"), ("v2", "blue")):
+            (theme / "_extensions" / "demo" / "smalldocs.yml").write_text("css: demo.css\n")
+            (theme / "_extensions" / "demo" / "demo.css").write_text(f"body {{ color: {colour}; }}\n")
+            (theme / "_extensions" / "demo" / "fonts" / f"{tag}.woff").write_bytes(bytes(range(256)))
+            run("add", "-A")
+            run("-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", tag)
+            run("tag", tag)
+            (theme / "_extensions" / "demo" / "fonts" / f"{tag}.woff").unlink()
+        self.theme = theme
+        self.walks = {"first": WalkSites.facts("first", "The first", ""), "second": WalkSites.facts("second", "Second", "")}
+
+    def pages(self, site: str | None) -> dict[str, str | bytes]:
+        "Render the pages, with this site.toml, or none."
+        (self.toc.parent / "site.toml").unlink(missing_ok=True)
+        if site is not None:
+            (self.toc.parent / "site.toml").write_text(site)
+        with mock.patch.object(render, "export", lambda repo, toc, ident, *args: self.walks[ident]), \
+                mock.patch.object(render, "toml_edits", lambda *args: {}), \
+                mock.patch.object(render, "page_walks", lambda toc: [{"id": ident} for ident in self.walks]):
+            pages, _, _ = render.class_pages(self.toc, Path("."), "https://github.com/o/demo")
+        return pages
+
+    def test_a_theme_and_settings(self) -> None:
+        "The theme's files go in site/_extensions/, with .source, and a list of them; _smalldocs.yml names the theme and the settings."
+        pages = self.pages(f'theme = "{self.theme.as_uri()}@v1"\n\n[smalldocs]\nreference-location = "margin"\nwebsite.navbar.background = "primary"\n')
+        self.assertEqual(pages["site/_extensions/demo/demo.css"], b"body { color: red; }\n")
+        self.assertEqual(pages["site/_extensions/demo/fonts/v1.woff"], bytes(range(256)))
+        self.assertIn(b"ref: v1", pages["site/_extensions/demo/.source"])
+        listed = render.theme_list(pages[render.THEME_LIST])
+        self.assertEqual(listed, {name for name in pages if name.startswith("site/_extensions/") and name != render.THEME_LIST})
+        config = pages["site/_smalldocs.yml"]
+        self.assertIn('metadata-files: ["_settings.yml"]', config)
+        self.assertIn('theme: "demo"', config)
+        self.assertEqual(json.loads(pages["site/_settings.yml"].split("\n", 1)[1]),
+                         {"reference-location": "margin", "website": {"navbar": {"background": "primary"}}})
+        self.assertEqual(pages["site/second/_metadata.yml"], f'# {render.MADE}\ntitle-prefix: "Second"\n')
+
+    def test_no_theme_same_bytes(self) -> None:
+        "Without site.toml, the pages are those of a class that never had a theme: cosmo, no _settings.yml, nothing in _extensions/."
+        pages = self.pages(None)
+        self.assertEqual(self.pages(None), pages)
+        self.assertIn("\ntheme: cosmo\n", pages["site/_smalldocs.yml"])
+        self.assertNotIn("metadata-files", pages["site/_smalldocs.yml"])
+        self.assertFalse([name for name in pages if "_extensions" in name or name.endswith("_settings.yml")])
+        self.assertEqual(self.pages("[smalldocs]\n")["site/_smalldocs.yml"], pages["site/_smalldocs.yml"], "an empty table changes nothing")
+
+    def test_written_and_removed(self) -> None:
+        "render.py --pages writes the theme; a new ref replaces its files; no theme removes them and their folders, and gives the same bytes."
+        out = self.tmp / "out"
+        mine = out / "site" / "_extensions" / "mine.txt"
+        plain = self.pages(None)
+        render.write([(out, plain, list(render.PAGE_GLOBS))])
+        before = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
+        render.write([(out, self.pages(f'theme = "{self.theme.as_uri()}@v1"\n'), list(render.PAGE_GLOBS))])
+        self.assertTrue((out / "site/_extensions/demo/fonts/v1.woff").is_file())
+        mine.write_text("Mine.\n")
+        render.write([(out, self.pages(f'theme = "{self.theme.as_uri()}@v2"\n'), list(render.PAGE_GLOBS))])
+        self.assertFalse((out / "site/_extensions/demo/fonts/v1.woff").exists(), "a file of the old ref goes")
+        self.assertEqual((out / "site/_extensions/demo/demo.css").read_text(), "body { color: blue; }\n")
+        render.write([(out, self.pages(None), list(render.PAGE_GLOBS))])
+        self.assertFalse((out / "site/_extensions/demo").exists())
+        self.assertEqual(mine.read_text(), "Mine.\n", "a file that render.py did not make stays")
+        mine.unlink()
+        (out / "site" / "_extensions").rmdir()
+        after = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
+        self.assertEqual(after, before)
+
+    def repo(self, files: dict[str, bytes]) -> Path:
+        "Make a theme repository with these files, at the tag v1."
+        theme = self.tmp / f"theme-{len(list(self.tmp.iterdir()))}"
+        for name, data in files.items():
+            (theme / name).parent.mkdir(parents=True, exist_ok=True)
+            (theme / name).write_bytes(data)
+        for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "v1"], ["tag", "v1"]):
+            subprocess.run(["git", "-C", str(theme), *args], check=True, capture_output=True)
+        return theme
+
+    def test_odd_themes(self) -> None:
+        "A theme two folders down takes its last name; a theme with the name of a theme of smalldocs, or a file named with a new line, is refused."
+        nested = self.repo({"_extensions/org/fancy/smalldocs.yml": b"css: f.css\n", "_extensions/org/fancy/f.css": b"p {}\n"})
+        self.assertIn('theme: "fancy"', self.pages(f'theme = "{nested.as_uri()}@v1"\n')["site/_smalldocs.yml"])
+        cosmo = self.repo({"_extensions/cosmo/smalldocs.yml": b"css: c.css\n", "_extensions/cosmo/c.css": b"p {}\n"})
+        with self.assertRaisesRegex(render.PagesError, "the name of a theme of smalldocs"):
+            self.pages(f'theme = "{cosmo.as_uri()}@v1"\n')
+        odd = self.repo({"_extensions/demo/smalldocs.yml": b"css: d.css\n", "_extensions/demo/d.css": b"p {}\n",
+                         "_extensions/demo/z\nsite/_extensions/mine.css": b"x\n"})
+        with self.assertRaisesRegex(render.PagesError, "control character"):
+            self.pages(f'theme = "{odd.as_uri()}@v1"\n')
+
+    def test_a_link_in_the_theme_folder(self) -> None:
+        "The list names a path, and the disk decides where it goes: a path through a symbolic link is not removed."
+        out, victim = self.tmp / "out", self.tmp / "victim"
+        victim.mkdir()
+        (victim / "precious.txt").write_text("Mine.\n")
+        (out / "site" / "_extensions").mkdir(parents=True)
+        (out / "site" / "_extensions" / "out").symlink_to(victim)
+        (out / render.THEME_LIST).write_text(f"# {render.MADE}\nsite/_extensions/out/precious.txt\n")
+        self.assertFalse(render.in_extensions(out, "site/_extensions/out/precious.txt"))
+        render.write([(out, self.pages(None), list(render.PAGE_GLOBS))])
+        self.assertEqual((victim / "precious.txt").read_text(), "Mine.\n")
+
+    def test_refused(self) -> None:
+        "A theme without a ref, a key that site.toml does not have, and a setting that render.py writes itself."
+        for site, says in ((f'theme = "{self.theme.as_uri()}"\n', "a source and a ref"), ('colour = "red"\n', "has colour"),
+                           ("[smalldocs]\nwebsite.sidebar.style = \"floating\"\n", "sets website.sidebar.style, and render.py writes website.sidebar"),
+                           ('[smalldocs]\ntheme = "x"\n', "give the theme with theme ="), ('smalldocs = "x"\n', "must be a table"),
+                           (f'theme = "{(self.tmp / "nowhere").as_uri()}@v1"\n', "smalldocs add"),
+                           (f'theme = "{self.theme}@v1"\n', "not a folder of this machine"), ("[smalldocs]\ndate = 2024-01-01\n", "write it as a string"),
+                           ('[smalldocs]\nformat.html.css = "x.css"\n', "render.py writes format itself")):
+            with self.assertRaisesRegex(render.PagesError, re.escape(says)):
+                self.pages(site)
 
 
 class OurWords(unittest.TestCase):

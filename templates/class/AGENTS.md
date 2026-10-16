@@ -11,6 +11,7 @@ repository for students is `../@project@-walk`. `just setup` clones them there i
 | `notes.md` | The script of every step, one `## step-name Title` section for each tag of the project |
 | `slides/` | The slides, and `slides.toml`, the manifest that says which slides show at which step. Rename `slides.example.toml` to `slides.toml` once it has a line for every step. Keep no notes in this folder: `just walk-update` copies it whole |
 | `toc.toml` | Only in a class with several walks: the list of walks, the first one the default |
+| `site.toml` | Only for a website with a smalldocs theme: `theme = "owner/repo@ref"`, and a table `[smalldocs]` of settings. WALKS.md of walk-kit, "A theme for the website", says how |
 | `walks/ID/` | Only in a class with several walks: the `notes.md` and `slides/` of each walk after the first |
 | `justfile` | The recipes. `just` lists them |
 | `build/` | What the recipes make. Git ignores it |

@@ -288,6 +288,44 @@ class Class(unittest.TestCase):
         self.assertEqual(refused.returncode, 2, refused.stdout)
         self.assertIn("mine.txt", refused.stderr)
 
+    def test_a_theme_comes_and_goes(self) -> None:
+        """A class's site.toml gives the walk repository the theme's files in site/_extensions/, through just pages and then
+        walk-update. Without site.toml, the next run removes them, and the walk repository is as it was before the theme."""
+        theme = self.tmp / "theme-repo"
+        (theme / "_extensions" / "demo").mkdir(parents=True)
+        (theme / "_extensions" / "demo" / "smalldocs.yml").write_text("css: demo.css\n")
+        (theme / "_extensions" / "demo" / "demo.css").write_text("body { color: red; }\n")
+        (theme / "_extensions" / "demo" / "font.woff").write_bytes(bytes(range(256)))
+        git(theme.parent, "init", "-q", "-b", "main", str(theme))
+        git(theme, "add", "-A")
+        git(theme, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "v1")
+        git(theme, "tag", "v1")
+        folder = self.tmp / "themed-class"
+        shutil.copytree(self.folder, folder, ignore=shutil.ignore_patterns(".git"))
+        clone = self.walk_clone("themed-walk")
+        before = files_of(clone)
+
+        def update(*args: str) -> subprocess.CompletedProcess:
+            return script("walk_update.py", "--project", "tally", "--upstream", "o", "--toc", str(folder / "toc.toml"), "--walk", str(clone),
+                          "--repo", str(self.repo), *args, cwd=folder, env=self.env)
+
+        (folder / "site.toml").write_text(f'theme = "{theme.as_uri()}@v1"\n\n[smalldocs]\nreference-location = "margin"\n')
+        for args in (["--pages-only"], []):   # just pages, then just walk-update over its uncommitted pages
+            done = update(*args)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual((clone / "site/_extensions/demo/font.woff").read_bytes(), bytes(range(256)))
+        self.assertIn("commit:", (clone / "site/_extensions/demo/.source").read_text())
+        self.assertIn('theme: "demo"', (clone / "site/_smalldocs.yml").read_text())
+        git(clone, "add", "-A")
+        git(clone, "commit", "--quiet", "-m", "The theme")
+        (folder / "site.toml").unlink()
+        for args in (["--pages-only"], []):
+            done = update(*args)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse((clone / "site" / "_extensions").exists())
+        self.assertEqual(files_of(clone), before)
+        self.assertFalse([name for name in files_of(folder) if "_extensions" in name or name.endswith(".source")], "nothing of the theme in the class")
+
     def test_old_templates_replaced_hand_edits_kept(self) -> None:
         if not (KIT / ".git").exists():
             self.skipTest("walk-kit is not a git clone, so it knows no old template")
@@ -320,7 +358,7 @@ class Class(unittest.TestCase):
     def test_walk_justfile_lists_its_recipes(self) -> None:
         done = just(self.walk, "--list", env=self.env)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(re.findall(r"^\s+(\S+)", done.stdout, re.MULTILINE), ["pdf", "present", "setup"])
+        self.assertEqual(re.findall(r"^\s+(\S+)", done.stdout, re.MULTILINE), ["pdf", "present", "setup", "site"])
 
     def offline(self) -> dict:  # The environment of a student with no network: github.com is a folder of bare clones
         "Keep git off the network: https is not allowed, and https://github.com/ leads to a folder of the temporary folder."
