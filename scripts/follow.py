@@ -48,11 +48,11 @@ TOOLS = "Read,Grep,Glob"
 TIMEOUT = 900  # seconds for one command
 LANGUAGES = {"bash", "sh", "shell"}  # the fences whose commands run
 CHECK = re.compile(r"^\s*git check\b")  # a line of a fence that is a git check
-CATCH_UP = re.compile(r"^git (?:restore --source [0-9a-f]+ --staged -- :/|rm -rq --cached --ignore-unmatch -- :/) && "
-                      r"git restore --source [0-9a-f]+ --staged --worktree -- :/$")  # the command that puts a commit's files in place
+CATCH_UP = re.compile(r"^(?:git fetch --quiet --tags --force origin; )?git (?:restore --source [\w./-]+ --staged -- :/|rm -rq --cached "
+                      r"--ignore-unmatch -- :/) && git restore --source [\w./-]+ --staged --worktree -- :/$")  # the command that puts a commit's files in place
 START_HERE = "If you start at this part"  # the text before the command that a student who starts at a part runs
 CURL = re.compile(r"curl\s+-fsSL\s+(?P<url>https://github\.com/[^/\s]+/[^/\s]+/(?:commit/(?P<sha>[0-9a-f]+)|compare/(?P<a>[0-9a-f]+)\.\.\.(?P<b>[0-9a-f]+))\.diff)")
-SOURCE = re.compile(r"--source\s+([0-9a-f]+)\s+--staged\s+--worktree")
+SOURCE = re.compile(r"--source\s+([\w./-]+)\s+--staged\s+--worktree")  # a commit, or the tag of a step
 DELIMITER = re.compile(r"-?[ \t]*(?:'([^']*)'|\"([^\"]*)\"|\\?([^\s;&|<>()]+))")
 
 SCHEMA = {

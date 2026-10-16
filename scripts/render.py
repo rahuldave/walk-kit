@@ -385,7 +385,7 @@ class Page:
                  "differs:", "", "```bash", f"git check {sha[:12]}", "```", "",
                  f"If you are stuck, this command puts the files of this {what} in place of yours. A file that you made yourself "
                  "stays:", "",
-                 "```bash", catch_up(before, sha), "```", "")
+                 "```bash", catch_up(before, sha, self.facts), "```", "")
 
     def what_changed(
         self,
@@ -598,7 +598,10 @@ def part_end(
     page: "Page",  # The page of the part
     stop: dict,  # The part
 ) -> None:
-    """Write the end of a part: where it ends, with the code there."""
+    """Write the end of a part: where it ends, with the code there. The first part starts and ends at its own code, which
+    its top names already."""
+    if not stop["start"]:
+        return
     page.add("", f"This part ends at the code at {page.place(stop['commit'])}. " +
              page.button("The code after this part", page.tree(stop["commit"]), "primary"), "")
 
@@ -619,12 +622,12 @@ def stop_page(
     before = facts["stops"][at - 2]["commit"] if at > 1 else None
     if mode == "do" and stop["start"] and before and stop["start"] != before:   # the walk skips commits: the learner takes them
         page.add("", "This part does not start where the part before it ends, because the walk skips some changes. This command "
-                 "puts the files that this part starts from in place of yours. Run it, and then go on:", "", "```bash", catch_up(before, stop["start"]), "```", "")
+                 "puts the files that this part starts from in place of yours. Run it, and then go on:", "", "```bash", catch_up(before, stop["start"], facts), "```", "")
     if site and mode == "do" and stop["start"]:   # a page of its own: a reader may start here
         page.add("", "If you start at this part, make your clone as **Get the project** says, and then run this command. It puts "
                  "in your clone the files that this part starts from. A file that the project deleted before this part stays, so "
                  "delete it if `git check` lists it:", "",
-                 "```bash", catch_up(None, stop["start"]), "```", "")
+                 "```bash", catch_up(None, stop["start"], facts), "```", "")
     page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"], stop["start"] if not stop["moves"] else None)
     if not stop["moves"]:   # the first part too: its check says that the learner's clone is right
         page.check(stop["commit"], stop["start"], "part")
@@ -644,7 +647,8 @@ def stop_page(
         page.parts(move["parts"], move["commit"], move["files"], move["name"])
         page.check(move["commit"], stop["moves"][number - 1]["commit"] if number else stop["start"], "move")
         makes = [p for p in move["parts"] if p["kind"] == "command" and p["makes"]]
-        page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], makes, move["commit"], None)
+        page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], makes, move["commit"], None,
+                          after=number < len(stop["moves"]) - 1)   # the last move's code is the part's end, which the line below names
     part_end(page, stop)
     return page.lines
 
@@ -659,13 +663,20 @@ def github(
 def catch_up(
     before: str | None,  # The commit where the learner's files were meant to be; None if unknown
     sha: str,  # The commit to take the files of
+    facts: dict | None = None,  # The facts of the walk, to name a commit by the tag of its step; None names it by the commit
 ) -> str:  # The command, for the learner's clone
     """Make the command that puts the files of a commit in place of the learner's. git restore takes away each file that
     the index has and the commit does not: so the index first gets the files of the commit before, and the learner's own
     files stay. Without that commit, the index is first emptied, so no file goes: a file that the project deleted before
-    stays, and the check lists it."""
-    first = f"git restore --source {before[:12]} --staged -- :/" if before else "git rm -rq --cached --ignore-unmatch -- :/"
-    return f"{first} && git restore --source {sha[:12]} --staged --worktree -- :/"
+    stays, and the check lists it. A commit with a tag goes by its tag, as the page names it. A tag can move after the
+    clone, so the command fetches the tags first; with no network, the tags of the clone serve."""
+    def ref(commit: str) -> str:
+        return (step_tag(facts, commit) if facts else None) or commit[:12]
+
+    first = f"git restore --source {ref(before)} --staged -- :/" if before else "git rm -rq --cached --ignore-unmatch -- :/"
+    command = f"{first} && git restore --source {ref(sha)} --staged --worktree -- :/"
+    tagged = facts and any(step_tag(facts, commit) for commit in (before, sha) if commit)
+    return ("git fetch --quiet --tags --force origin; " if tagged else "") + command
 
 
 PACKAGE_NAMES = Path(__file__).resolve().parent / "package_names.py"  # the program that git check runs on each file that loose names

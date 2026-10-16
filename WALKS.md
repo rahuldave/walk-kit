@@ -768,7 +768,12 @@ it. The first part of the project starts from its own code, "The code of this pa
 
 On the website, a page of Read the tutorial also gives the commands that get the code where the part starts. They
 make a clone, if the folder has none. Then `git switch --detach` goes to the tag or the commit. A page of Build it yourself keeps its
-own command, for a reader who starts at that part. The front page says what a part is, and where its code starts and
+own command, for a reader who starts at that part. That command, and the command for a reader who is stuck, take the
+code by its tag too. A tag can move after a clone, so the command first fetches the tags, and goes on without them
+when there is no network.
+
+The first part has no line at its bottom, because its top names its code. The last move of a part has no link to
+its code after it, because the end of the part names that code. The front page says what a part is, and where its code starts and
 ends.
 
 On the website, the links to code are buttons of the class `btn-primary`. A link to code goes to where a part starts

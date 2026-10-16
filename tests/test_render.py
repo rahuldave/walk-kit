@@ -249,10 +249,38 @@ class PartEnds(unittest.TestCase):
         self.assertNotIn("{.btn", markdown)
 
     def test_the_first_part(self) -> None:
-        "The first part of the project has the code of this part at its top."
+        "The first part of the project has the code of this part at its top, and no line at its bottom, which would name the same code."
         stop = {"name": "step-00", "number": "0", "title": "Start", "start": None, "commit": self.A, "parts": [], "files": [], "moves": []}
         text = self.page(stop, "watch", True, at=1)
         self.assertIn("This part is where the project starts, at `step-00`. [The code of this part](https://github.com/o/demo/tree/step-00)", text)
+        self.assertNotIn("This part ends", text)
+
+    def test_the_last_move_has_no_code_after_it(self) -> None:
+        "The last move of a part keeps its change, but not its code after it: the part's end names that code. An earlier move keeps both."
+        moves = [{"name": "step-01.1", "number": "1.1", "title": "One", "commit": self.B, "parts": [], "files": [], "parent": self.A},
+                 {"name": "step-01.2", "number": "1.2", "title": "Two", "commit": self.C, "parts": [], "files": [], "parent": self.B}]
+        stop = {"name": "step-01", "number": "1", "title": "One", "start": self.A, "commit": self.C, "parts": [], "files": [], "moves": moves}
+        text = self.page(stop, "watch", True)
+        self.assertEqual(text.count("[The code after it]"), 1, text)
+        self.assertIn(f"[The code after it](https://github.com/o/demo/tree/{self.B})", text)
+        self.assertEqual(text.count("[This change on GitHub]"), 2)
+        self.assertEqual(text.count("(https://github.com/o/demo/tree/step-01)"), 1, "once, at the part's end")
+
+    def test_the_command_takes_the_tag(self) -> None:
+        "Build it yourself takes the files of a part by the tag of its step, after a fetch of the tags; at a move, by the commit."
+        stop = {"name": "step-02", "number": "2", "title": "Two", "start": self.C, "commit": self.D, "parts": [], "files": [], "moves": []}
+        build = self.page(stop, "do", True)
+        self.assertIn("git fetch --quiet --tags --force origin; git rm -rq --cached --ignore-unmatch -- :/ && "
+                      "git restore --source step-01 --staged --worktree -- :/", build)
+        self.assertIn("git restore --source step-01 --staged -- :/ && git restore --source step-02 --staged --worktree -- :/", build)
+        self.assertEqual(render.catch_up(None, self.B, {"history": self.HISTORY}),
+                         f"git rm -rq --cached --ignore-unmatch -- :/ && git restore --source {self.B[:12]} --staged --worktree -- :/")
+        import follow
+
+        for command in (render.catch_up(None, self.C, {"history": self.HISTORY}), render.catch_up(self.C, self.D, {"history": self.HISTORY}),
+                        render.catch_up(None, self.B, {"history": self.HISTORY})):   # follow.py knows each, and where it starts
+            self.assertTrue(follow.CATCH_UP.match(command), command)
+        self.assertEqual(follow.SOURCE.search(render.catch_up(None, self.C, {"history": self.HISTORY})).group(1), "step-01")
 
 
 class OneMovePart(unittest.TestCase):
