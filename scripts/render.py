@@ -951,7 +951,8 @@ def site_settings(
     if theme is not None and (not isinstance(theme, str) or not re.fullmatch(r"\S+@[^@\s:]+", theme)):
         raise PagesError(f"{path}: theme must be a source and a ref, such as \"owner/repo@v1.0.0\", so that every run gets the same files")
     # owner/repo on GitHub, or a git URL: a folder on this machine would put its path in the .source that students get
-    if theme is not None and not re.match(r"^(?:[\w.-]+/[\w.-]+@|[a-zA-Z][a-zA-Z0-9+.-]*://|[\w.-]+@[\w.-]+:)", theme):
+    local = theme is not None and (theme.lower().startswith("file:") or re.match(r"^\.\.?(?:/|@)|^[^@]*/\.\.?(?:/|@)", theme))
+    if theme is not None and (local or not re.match(r"^(?:[\w.-]+/[\w.-]+@|[a-zA-Z][a-zA-Z0-9+.-]*://|[\w.-]+@[\w.-]+:)", theme)):
         raise PagesError(f"{path}: theme must be owner/repo@ref on GitHub, or a git URL with @ref, and not a folder of this machine")
     settings = data.get("smalldocs", {})
     if not isinstance(settings, dict):
@@ -985,6 +986,13 @@ def theme_files(
     (root / "_smalldocs.yml").write_text("project:\n  type: website\n", encoding="utf-8")
     # git over SSH asks nothing: a host it does not know, or a key with a passphrase, fails at once and says why
     quiet = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes"}
+    # A branch moves, and then two runs get other files: the ref must be a tag or a commit. owner/repo is GitHub over SSH, as smalldocs takes it
+    where, _, ref = source.rpartition("@")
+    url = f"git@github.com:{where.removesuffix('.git')}.git" if re.fullmatch(r"[\w.-]+/[\w.-]+", where) else where
+    heads = subprocess.run(["git", "ls-remote", "--heads", "--", url, f"refs/heads/{ref}"], capture_output=True, text=True, check=False,
+                           stdin=subprocess.DEVNULL, env=quiet)
+    if heads.returncode == 0 and heads.stdout.strip():
+        raise PagesError(f"{source}: {ref} is a branch, which moves; give a tag or a commit of the theme, so that every run gets the same files")
     done = subprocess.run([*SMALLDOCS, "add", source, "--dir", str(root), "--force"], capture_output=True, text=True, check=False,
                           stdin=subprocess.DEVNULL, env=quiet)
     if done.returncode:

@@ -730,7 +730,13 @@ class Themes(unittest.TestCase):
         self.toc = self.tmp / "class" / "toc.toml"
         self.toc.parent.mkdir()
         self.toc.write_text("")
-        theme = self.tmp / "theme"
+        # owner/repo is GitHub over SSH, as smalldocs takes it: git finds o/NAME.git in a folder of the test instead
+        self.github = self.tmp / "github"
+        patcher = mock.patch.dict(os.environ, {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.{self.github.as_uri()}/.insteadOf",
+                                               "GIT_CONFIG_VALUE_0": "git@github.com:"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        theme = self.github / "o" / "theme.git"
         (theme / "_extensions" / "demo" / "fonts").mkdir(parents=True)
         def run(*args: str) -> None:
             subprocess.run(["git", "-C", str(theme), *args], check=True, capture_output=True)
@@ -760,7 +766,7 @@ class Themes(unittest.TestCase):
 
     def test_a_theme_and_settings(self) -> None:
         "The theme's files go in site/_extensions/, with .source, and a list of them; _smalldocs.yml names the theme and the settings."
-        pages = self.pages(f'theme = "{self.theme.as_uri()}@v1"\n\n[smalldocs]\nreference-location = "margin"\nwebsite.navbar.background = "primary"\n')
+        pages = self.pages(f'theme = "o/theme@v1"\n\n[smalldocs]\nreference-location = "margin"\nwebsite.navbar.background = "primary"\n')
         self.assertEqual(pages["site/_extensions/demo/demo.css"], b"body { color: red; }\n")
         self.assertEqual(pages["site/_extensions/demo/fonts/v1.woff"], bytes(range(256)))
         self.assertIn(b"ref: v1", pages["site/_extensions/demo/.source"])
@@ -789,10 +795,10 @@ class Themes(unittest.TestCase):
         plain = self.pages(None)
         render.write([(out, plain, list(render.PAGE_GLOBS))])
         before = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
-        render.write([(out, self.pages(f'theme = "{self.theme.as_uri()}@v1"\n'), list(render.PAGE_GLOBS))])
+        render.write([(out, self.pages(f'theme = "o/theme@v1"\n'), list(render.PAGE_GLOBS))])
         self.assertTrue((out / "site/_extensions/demo/fonts/v1.woff").is_file())
         mine.write_text("Mine.\n")
-        render.write([(out, self.pages(f'theme = "{self.theme.as_uri()}@v2"\n'), list(render.PAGE_GLOBS))])
+        render.write([(out, self.pages(f'theme = "o/theme@v2"\n'), list(render.PAGE_GLOBS))])
         self.assertFalse((out / "site/_extensions/demo/fonts/v1.woff").exists(), "a file of the old ref goes")
         self.assertEqual((out / "site/_extensions/demo/demo.css").read_text(), "body { color: blue; }\n")
         render.write([(out, self.pages(None), list(render.PAGE_GLOBS))])
@@ -803,27 +809,28 @@ class Themes(unittest.TestCase):
         after = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
         self.assertEqual(after, before)
 
-    def repo(self, files: dict[str, bytes]) -> Path:
-        "Make a theme repository with these files, at the tag v1."
-        theme = self.tmp / f"theme-{len(list(self.tmp.iterdir()))}"
-        for name, data in files.items():
-            (theme / name).parent.mkdir(parents=True, exist_ok=True)
-            (theme / name).write_bytes(data)
+    def repo(self, files: dict[str, bytes]) -> str:
+        "Make a theme repository with these files, at the tag v1, and give its source, o/NAME@v1."
+        name = f"t{len(list((self.github / 'o').iterdir()))}"
+        theme = self.github / "o" / f"{name}.git"
+        for path, data in files.items():
+            (theme / path).parent.mkdir(parents=True, exist_ok=True)
+            (theme / path).write_bytes(data)
         for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "v1"], ["tag", "v1"]):
             subprocess.run(["git", "-C", str(theme), *args], check=True, capture_output=True)
-        return theme
+        return f"o/{name}@v1"
 
     def test_odd_themes(self) -> None:
         "A theme two folders down takes its last name; a theme with the name of a theme of smalldocs, or a file named with a new line, is refused."
         nested = self.repo({"_extensions/org/fancy/smalldocs.yml": b"css: f.css\n", "_extensions/org/fancy/f.css": b"p {}\n"})
-        self.assertIn('theme: "fancy"', self.pages(f'theme = "{nested.as_uri()}@v1"\n')["site/_smalldocs.yml"])
+        self.assertIn('theme: "fancy"', self.pages(f'theme = "{nested}"\n')["site/_smalldocs.yml"])
         cosmo = self.repo({"_extensions/cosmo/smalldocs.yml": b"css: c.css\n", "_extensions/cosmo/c.css": b"p {}\n"})
         with self.assertRaisesRegex(render.PagesError, "the name of a theme of smalldocs"):
-            self.pages(f'theme = "{cosmo.as_uri()}@v1"\n')
+            self.pages(f'theme = "{cosmo}"\n')
         odd = self.repo({"_extensions/demo/smalldocs.yml": b"css: d.css\n", "_extensions/demo/d.css": b"p {}\n",
                          "_extensions/demo/z\nsite/_extensions/mine.css": b"x\n"})
         with self.assertRaisesRegex(render.PagesError, "control character"):
-            self.pages(f'theme = "{odd.as_uri()}@v1"\n')
+            self.pages(f'theme = "{odd}"\n')
 
     def test_a_link_in_the_theme_folder(self) -> None:
         "The list names a path, and the disk decides where it goes: a path through a symbolic link is not removed."
@@ -839,10 +846,11 @@ class Themes(unittest.TestCase):
 
     def test_refused(self) -> None:
         "A theme without a ref, a key that site.toml does not have, and a setting that render.py writes itself."
-        for site, says in ((f'theme = "{self.theme.as_uri()}"\n', "a source and a ref"), ('colour = "red"\n', "has colour"),
+        for site, says in (('theme = "o/theme"\n', "a source and a ref"), ('colour = "red"\n', "has colour"),
                            ("[smalldocs]\nwebsite.sidebar.style = \"floating\"\n", "sets website.sidebar.style, and render.py writes website.sidebar"),
                            ('[smalldocs]\ntheme = "x"\n', "give the theme with theme ="), ('smalldocs = "x"\n', "must be a table"),
-                           (f'theme = "{(self.tmp / "nowhere").as_uri()}@v1"\n', "smalldocs add"),
+                           ('theme = "o/nowhere@v1"\n', "smalldocs add"), ('theme = "o/theme@main"\n', "is a branch"),
+                           ('theme = "../theme@v1"\n', "not a folder of this machine"), (f'theme = "{self.theme.as_uri()}@v1"\n', "not a folder of this machine"),
                            (f'theme = "{self.theme}@v1"\n', "not a folder of this machine"), ("[smalldocs]\ndate = 2024-01-01\n", "write it as a string"),
                            ('[smalldocs]\nformat.html.css = "x.css"\n', "render.py writes format itself")):
             with self.assertRaisesRegex(render.PagesError, re.escape(says)):
