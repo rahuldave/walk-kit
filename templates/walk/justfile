@@ -95,4 +95,4 @@ pdf id="":
 
 # Build the website in site/ with smalldocs, serve it on this machine, and rebuild it on every change. The theme is in site/_extensions/
 site *args:
-    uvx --from 'smalldocs>=0.3.0' smalldocs preview site "$@"
+    uvx --from 'smalldocs>=0.3.3' smalldocs preview site "$@"

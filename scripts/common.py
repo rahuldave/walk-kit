@@ -21,7 +21,7 @@ TEMPLATES = HERE.parent / "templates"
 GITHUB = "git+https://github.com/rahuldave/timewalk"
 TIMEWALK = os.environ.get("TIMEWALK", GITHUB)  # what a run of these scripts uses
 UVX = ["uvx", "--refresh-package", "timewalk", "--from"]  # then the source, then the command
-SMALLDOCS = ["uvx", "--from", "smalldocs>=0.3.0", "smalldocs"]  # then the command: render, add
+SMALLDOCS = ["uvx", "--from", "smalldocs>=0.3.3", "smalldocs"]  # then the command: render, add
 NO_TOML = 3  # the exit code of `common.py manifest` under a Python without tomllib: the class justfile goes on without it
 
 
