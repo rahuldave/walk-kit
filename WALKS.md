@@ -756,7 +756,25 @@ learns it once:
 - the whole diff of each file, folded. A lockfile, such as `uv.lock`, and a binary file get no diff. In Build it
   yourself, each patch is open: the whole diff of a file that no `do$` line writes, and the lines that the move
   changes after the `do$` line that writes a file.
-- a link to the change on GitHub, and a link to the code after it
+- a link to the change on GitHub, and, after a move, a link to the code after it
+
+### The start and the end of a part
+
+A reader outside timewalk must know which project a page is about, and where to get its code. So each part starts
+with the project on GitHub, by name and link, and the code that the part starts from. Each part ends with the code
+that it ends at, after its last What changed. The code is named by the tag of a step, such as `step-01`, and the
+link goes to that tag. A part that starts or ends partway through a step names the commit, and the step that holds
+it. The first part of the project starts from its own code, "The code of this part".
+
+On the website, a page of Read the tutorial also gives the commands that get the code where the part starts. They
+make a clone, if the folder has none. Then `git switch --detach` goes to the tag or the commit. A page of Build it yourself keeps its
+own command, for a reader who starts at that part. The front page says what a part is, and where its code starts and
+ends.
+
+On the website, the links to code are buttons of the class `btn-primary`. A link to code goes to where a part starts
+or ends, or to the code after a move. The links to a change and to a file are buttons of the class `btn-secondary`.
+Every theme of smalldocs styles both, in light and in dark. The pages on GitHub get the same links, without the class,
+which GitHub would show as text.
 
 In Build it yourself, the diffs under What changed are open, with a summary. A patch reads "The patch to
 `PATH`". A file that a `do$` line writes and the move then changes reads "After `CMD`, the patch to `PATH`".

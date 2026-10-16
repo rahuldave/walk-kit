@@ -21,7 +21,13 @@ A narrative has Read the tutorial only.
 
 Each part ends with a section **What changed**. It lists every file of the change, with what the notes say
 of it, its counts of lines and a link to the file. Then comes the diff of each file, closed until the reader opens
-it. Last come links to the change on GitHub and to the code after it. In Build it yourself, the patches to apply are open.
+it. Last come links to the change on GitHub and, after a move, to the code after it. In Build it yourself, the patches to
+apply are open.
+
+Each part starts with the project on GitHub and the code that the part starts from, and ends with the code that it
+ends at. The code is named by its tag, such as `step-01`, or by its commit when the part starts or ends partway
+through a step. On the website, a page of Read the tutorial also gives the commands that get that code, and the links
+to the code are buttons.
 
 ## Get the project, and git check
 

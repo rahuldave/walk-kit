@@ -88,7 +88,7 @@ The project has one word.
 
 </details>
 
-[The code]({URL}/tree/{A}).
+[The code of this part]({URL}/tree/{A}).
 """
 
 MOVES = f"""## 1.1 A second word {{#step-01.1}}
@@ -298,7 +298,7 @@ class Markdown(Case):
     def test_the_link_to_the_change(self) -> None:
         self.broken(self.page, f"[This change on GitHub]({URL}/commit/{C})", f"[This change on GitHub]({URL}/commit/{B})",
                     f"no link [This change on GitHub]({URL}/commit/{C})")
-        self.broken(self.page, f"[The code]({URL}/tree/{A})", f"[The code]({URL}/tree/{B})", "no link [The code]")
+        self.broken(self.page, f"[The code of this part]({URL}/tree/{A})", f"[The code of this part]({URL}/tree/{B})", "no link [The code of this part]")
 
     def test_links_and_ids(self) -> None:
         self.broken(self.page, "(#step-01.1-a.txt)", "(#step-01.1-a-txt)", "a link to #step-01.1-a-txt, which the page does not have")

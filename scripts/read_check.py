@@ -529,8 +529,8 @@ class Checker:
         """Check that the link to the change on GitHub names the change's own commits."""
         url = render.github(facts)
         section = "\n".join(text.lines[start:end])
-        if place is stop and not place["start"]:   # the first part: the project as it starts
-            wanted, words = f"{url}/tree/{place['commit']}", "The code"
+        if place is stop and not place["start"]:   # the first part: the project as it starts, at the top of the part
+            wanted, words = f"{url}/tree/{render.tree_ref(facts, place['commit'])}", "The code of this part"
         elif place is stop:
             wanted, words = f"{url}/compare/{place['start']}...{place['commit']}", "This change on GitHub"
         else:

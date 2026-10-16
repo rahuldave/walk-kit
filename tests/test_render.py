@@ -199,6 +199,62 @@ class FirstPart(Case):
         self.assertNotIn(f"git check {sha[:12]}", render.stop_page(facts, stop, 1, "watch", True))
 
 
+class PartEnds(unittest.TestCase):
+    "Each part page starts with the project and the code it starts from, and ends with the code it ends at: a tag, or a commit partway through a step."
+
+    A, B, C, D = "a" * 40, "b" * 40, "c" * 40, "d" * 40
+    HISTORY = {"step-00": "a" * 40, "step-01": "c" * 40, "step-01.1": "b" * 40, "step-01.2": "c" * 40, "step-02": "d" * 40, "step-02.1": "d" * 40}
+
+    def page(self, stop: dict, mode: str, site: bool, at: int = 2) -> str:
+        "Render one part."
+        first = {"name": "step-00", "number": "0", "title": "Start", "start": None, "commit": self.A, "parts": [], "files": [], "moves": []}
+        facts = {"walk": {"kind": "tutorial", "github": "https://github.com/o/demo", "loose": []}, "stops": [first, stop] if at == 2 else [stop],
+                 "history": self.HISTORY, "intro": []}
+        return "\n".join(render.stop_page(facts, stop, at, mode, site))
+
+    def test_a_part_with_no_moves(self) -> None:
+        "A part of one commit has the code before it at the top, and the code after it at the bottom, by their tags."
+        stop = {"name": "step-02", "number": "2", "title": "Two", "start": self.C, "commit": self.D, "parts": [], "files": [], "moves": []}
+        for mode in ("watch", "do"):
+            text = self.page(stop, mode, True)
+            top, bottom = text.index("[The code before this part](https://github.com/o/demo/tree/step-01)"), text.index("[The code after this part]")
+            self.assertLess(top, bottom)
+            self.assertIn("This part starts from the code at `step-01`.", text)
+            self.assertTrue(text.rstrip().endswith("[The code after this part](https://github.com/o/demo/tree/step-02){.btn .btn-sm .btn-primary}"), text)
+
+    def test_a_part_at_a_move(self) -> None:
+        "A part that starts partway through a step names the commit, and the step that holds it."
+        move = {"name": "step-01.2", "number": "1.2", "title": "More", "commit": self.C, "parts": [], "files": [], "parent": self.B}
+        stop = {"name": "step-01.2", "number": "1.2", "title": "More", "start": self.B, "commit": self.C, "parts": [], "files": [], "moves": [move]}
+        text = self.page(stop, "watch", True)
+        self.assertIn(f"This part starts from the code at `{self.B[:12]}`, partway through `step-01`.", text)
+        self.assertIn(f"(https://github.com/o/demo/tree/{self.B})", text)
+        self.assertIn(f"git switch --detach {self.B[:12]}", text)
+        self.assertIn("This part ends at the code at `step-01`.", text)
+
+    def test_read_the_tutorial_gets_the_code(self) -> None:
+        "Read the tutorial names the project, and on the website gives the commands that get the code where the part starts; Build it yourself does not."
+        stop = {"name": "step-02", "number": "2", "title": "Two", "start": self.C, "commit": self.D, "parts": [], "files": [], "moves": []}
+        read = self.page(stop, "watch", True)
+        self.assertIn("This walk goes through [o/demo](https://github.com/o/demo) on GitHub.", read)
+        self.assertIn("```bash\n[ -d demo ] || git clone https://github.com/o/demo\ncd demo\ngit fetch --quiet --tags --force origin\n"
+                      "git switch --detach step-01\n```", read)
+        self.assertLess(read.index("git switch --detach"), read.index("[The code after this part]"))
+        build = self.page(stop, "do", True)
+        self.assertIn("This walk goes through [o/demo]", build)
+        self.assertNotIn("git switch --detach", build)
+        self.assertIn("If you start at this part", build)
+        markdown = self.page(stop, "watch", False)
+        self.assertIn("[The code before this part](https://github.com/o/demo/tree/step-01)\n", markdown, "GitHub's pages get the bare link")
+        self.assertNotIn("{.btn", markdown)
+
+    def test_the_first_part(self) -> None:
+        "The first part of the project has the code of this part at its top."
+        stop = {"name": "step-00", "number": "0", "title": "Start", "start": None, "commit": self.A, "parts": [], "files": [], "moves": []}
+        text = self.page(stop, "watch", True, at=1)
+        self.assertIn("This part is where the project starts, at `step-00`. [The code of this part](https://github.com/o/demo/tree/step-00)", text)
+
+
 class OneMovePart(unittest.TestCase):
     "A small walk can select one move as a part, so the part and its move have one name."
 

@@ -228,9 +228,33 @@ class Page:
     def tree(
         self,
         sha: str,  # A commit
-    ) -> str:  # The code at that commit, on GitHub
+    ) -> str:  # The code at that commit, on GitHub: at the tag of a step, when the commit has one
         """Link to the code as a commit has it."""
-        return f"{self.url}/tree/{sha}"
+        return f"{self.url}/tree/{tree_ref(self.facts, sha)}"
+
+    def button(
+        self,
+        text: str,  # The words of the link, which stand alone on GitHub
+        url: str,  # Where it goes
+        kind: str,  # "primary" for the code where a part starts or ends, "secondary" for a change or a file
+    ) -> str:  # The link: on the website a button, which Bootstrap and every theme of smalldocs style
+        """Write a link that the website shows as a button. GitHub would show the attributes as text, so its pages get the bare link."""
+        return f"[{text}]({url})" + (f"{{.btn .btn-sm .btn-{kind}}}" if self.site else "")
+
+    def end(self) -> str:  # The full stop after a link that ends a sentence: none after a button of the website
+        "End a sentence that ends with a link."
+        return "" if self.site else "."
+
+    def place(
+        self,
+        sha: str,  # A commit of the project
+    ) -> str:  # The code there, for a reader: its tag, or the commit and the tag of the step that holds it
+        """Name the code at a commit: `step-01`, or `1a2b3c4d5e6f`, partway through `step-05`."""
+        tag = step_tag(self.facts, sha)
+        if tag:
+            return f"`{tag}`"
+        holder = step_of(self.facts, sha)
+        return f"`{sha[:12]}`" + (f", partway through `{holder}`" if holder else "")
 
     def add(
         self,
@@ -373,6 +397,7 @@ class Page:
         sha: str,  # The commit after the change
         base: str | None,  # The commit before, for a part of several commits; None for one commit, which has a page of its own
         first: bool = False,  # The first part of the walk, with nothing before it: its files are the whole project
+        after: bool = True,  # A link to the code after the change; a part's end says it itself
     ) -> None:
         """Write What changed: every file, its words, counts, link and the command that makes it; each diff whole and folded;
         the change on GitHub. In Build it yourself, each patch, what is changed by hand, is open."""
@@ -392,7 +417,7 @@ class Page:
             path = found["path"]
             item = words.get(path)
             said = ended(item["words"]) if item and item["words"].strip() else (describe(found["names"]) + "." if describe(found["names"]) else "")
-            link = "" if found["status"] == "deleted" else f" [The file]({self.blob(sha, path)})."
+            link = "" if found["status"] == "deleted" else f" {self.button('The file', self.blob(sha, path), 'secondary')}{self.end()}"
             source = f" It comes from {span(commands[found['by']])}." if isinstance(found["by"], int) and found["by"] < len(commands) else ""
             if path in took:
                 source = f" It comes from {span(commands[found['by']])}, and you take it from the project."
@@ -403,7 +428,7 @@ class Page:
             if item["move"]:   # a file as another part left it
                 then = self.facts["history"].get(item["move"], item["move"])
                 self.add(f"- `{item['path']}`" + (f", {item['words'].rstrip('.')}" if item["words"] else "") +
-                         f". [The file as it was then]({self.blob(then, item['path'])}).")
+                         f". {self.button('The file as it was then', self.blob(then, item['path']), 'secondary')}{self.end()}")
         for found in files:
             if found["binary"] or not found["diff"] or found["path"].rsplit("/", 1)[-1] in LOCKS:
                 continue
@@ -423,11 +448,11 @@ class Page:
                     summary = f"The diff that {command} makes in {path}"
             fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", diff)), default=0))
             self.add("", f"<details{open_}><summary>{summary}</summary>", "", "\n".join([f"{fence}diff", diff.rstrip("\n"), fence]), "", "</details>", "")
-        if base is None and first:   # the first part: the project as it starts, not one commit's change
-            self.add("", f"[The code]({self.tree(sha)}).", "")
+        if base is None and first:   # the first part: the project as it starts, which the top of the part links to
             return
         change = f"{self.url}/compare/{base}...{sha}" if base else f"{self.url}/commit/{sha}"
-        self.add("", f"[This change on GitHub]({change}). [The code after it]({self.tree(sha)}).", "")
+        self.add("", self.button("This change on GitHub", change, "secondary") + self.end() +
+                 (f" {self.button('The code after it', self.tree(sha), 'primary')}{self.end()}" if after else ""), "")
 
 
 def ended(
@@ -500,6 +525,84 @@ def counts(
     return change[0].upper() + change[1:]
 
 
+def step_tag(
+    facts: dict,  # The facts of the walk
+    sha: str,  # A commit
+) -> str | None:  # The tag of the step at that commit, such as step-01; None for a commit inside a step, or one the history does not name
+    """Find a step's tag from the history of the facts: a name there that is not a move's, which is the name of another and .k."""
+    history = facts.get("history") or {}
+    names = sorted(name for name, at in history.items() if at == sha and not is_move(name, history))
+    return names[0] if names else None
+
+
+def is_move(
+    name: str,  # A name of the history
+    history: dict,  # The history of the facts: every step and move, by name
+) -> bool:  # True for a move, whose name is its step's and .k
+    "Tell a move's name from a step's."
+    return "." in name and name.rsplit(".", 1)[0] in history
+
+
+def step_of(
+    facts: dict,  # The facts of the walk
+    sha: str,  # The commit of a move
+) -> str | None:  # The tag of the step that holds the move, or None
+    """Find the step that a move belongs to: its name is the step's and .k."""
+    history = facts.get("history") or {}
+    holders = sorted(name.rsplit(".", 1)[0] for name, at in history.items() if at == sha and is_move(name, history))
+    return holders[0] if holders else None
+
+
+def tree_ref(
+    facts: dict,  # The facts of the walk
+    sha: str,  # A commit
+) -> str:  # What GitHub's tree/ takes for it: the step's tag, or else the commit
+    """Name the code at a commit for a link to GitHub: the tag of a step, which a reader can also check out, or the commit."""
+    return step_tag(facts, sha) or sha
+
+
+def parts_lines(
+    facts: dict,  # The facts of the walk
+) -> list[str]:  # What a page of the website is, for its front page
+    """Say what a part is, and where its code is: a tag of the project, or a commit partway between two."""
+    tag = next((found for found in (step_tag(facts, stop["commit"]) for stop in facts["stops"]) if found), None)
+    named = f", such as `{tag}`" if tag else ""
+    return [f"Each page is one part. A part is one or more changes to the project, each a section of its page. The code where "
+            f"a part starts and where it ends has a tag on GitHub{named}, or is a commit between two tags. The top of each page "
+            "says where its part starts, and the bottom says where it ends, each with a link to that code."]
+
+
+def part_top(
+    page: "Page",  # The page of the part
+    stop: dict,  # The part
+) -> None:
+    """Write the start of a part: the project on GitHub, where the part starts, and, on a page of the website to read, the
+    commands that get that code. A part with no start is where the project starts, and starts from its own code."""
+    url = github(page.facts)
+    owner_name = "/".join(url.rsplit("/", 2)[-2:])
+    sha = stop["start"] or stop["commit"]
+    if stop["start"]:
+        where = f"This part starts from the code at {page.place(sha)}. " + page.button("The code before this part", page.tree(sha), "primary")
+    else:
+        where = f"This part is where the project starts, at {page.place(sha)}. " + page.button("The code of this part", page.tree(sha), "primary")
+    page.add("", f"This walk goes through [{owner_name}]({url}) on GitHub. {where}", "")
+    if page.site and page.mode == "watch":
+        name = url.rsplit("/", 1)[-1]
+        ref = step_tag(page.facts, sha) or sha[:12]
+        page.add("", "To look at this code on your machine, run these commands. The first one makes a clone, if this folder has none:", "",
+                 "```bash", f"[ -d {shlex.quote(name)} ] || git clone {url}", f"cd {shlex.quote(name)}",
+                 "git fetch --quiet --tags --force origin", f"git switch --detach {ref}", "```", "")
+
+
+def part_end(
+    page: "Page",  # The page of the part
+    stop: dict,  # The part
+) -> None:
+    """Write the end of a part: where it ends, with the code there."""
+    page.add("", f"This part ends at the code at {page.place(stop['commit'])}. " +
+             page.button("The code after this part", page.tree(stop["commit"]), "primary"), "")
+
+
 def stop_page(
     facts: dict,  # The facts of the walk
     stop: dict,  # One stop
@@ -512,6 +615,7 @@ def stop_page(
     top = 1 if site else 2
     if not site:
         page.add(f'<a id="{anchor(stop["name"])}"></a>', "", f"{'#' * top} {stop['number']} {stop['title']}".rstrip(), "")
+    part_top(page, stop)
     before = facts["stops"][at - 2]["commit"] if at > 1 else None
     if mode == "do" and stop["start"] and before and stop["start"] != before:   # the walk skips commits: the learner takes them
         page.add("", "This part does not start where the part before it ends, because the walk skips some changes. This command "
@@ -524,13 +628,10 @@ def stop_page(
     page.parts(stop["parts"], stop["commit"], stop["files"], stop["name"], stop["start"] if not stop["moves"] else None)
     if not stop["moves"]:   # the first part too: its check says that the learner's clone is right
         page.check(stop["commit"], stop["start"], "part")
-    if stop["moves"]:
-        before = f"[The code before this part]({page.tree(stop['start'])}). " if stop["start"] else ""
-        page.add("", f"{before}[The code after it]({page.tree(stop['commit'])}).", "")
-    else:
+    if not stop["moves"]:
         items = [p for p in stop["parts"] if p["kind"] == "item"]
         makes = [p for p in stop["parts"] if p["kind"] == "command" and p["makes"]]   # a step of one commit: its own do$ lines
-        page.what_changed(top + 1, stop["name"], stop["files"], items, makes, stop["commit"], stop["start"], first=not stop["start"])
+        page.what_changed(top + 1, stop["name"], stop["files"], items, makes, stop["commit"], stop["start"], first=not stop["start"], after=False)
     for number, move in enumerate(stop["moves"]):
         level = top + 1
         heading = f"{'#' * level} {move['number']} {move['title']}".rstrip()
@@ -544,6 +645,7 @@ def stop_page(
         page.check(move["commit"], stop["moves"][number - 1]["commit"] if number else stop["start"], "move")
         makes = [p for p in move["parts"] if p["kind"] == "command" and p["makes"]]
         page.what_changed(level + 1, move["name"], move["files"], [p for p in move["parts"] if p["kind"] == "item"], makes, move["commit"], None)
+    part_end(page, stop)
     return page.lines
 
 
@@ -1053,6 +1155,7 @@ def walk_site(
         front += [(f"This walk is one of several through the project. The website of the first, [{bracketed(home['title'])}](../), "
                    "lists them all."), ""]
     front += [*intro_lines(facts, "watch"), ""]
+    front += [*parts_lines(facts), ""]
     sidebar = [f"      - {prefix}index.qmd"]
     if len(ways(facts)) > 1:
         front += ["There are two ways to read this tutorial. Both have the same parts, in the same order.", ""]
