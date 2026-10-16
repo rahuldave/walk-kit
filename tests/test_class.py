@@ -24,6 +24,7 @@ KIT = Path(__file__).resolve().parent.parent
 SCRIPTS = KIT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import class_init
+import render
 import pdf_check
 import walk_init
 from common import GITHUB, fill
@@ -206,7 +207,7 @@ class Class(unittest.TestCase):
         for number, ident in enumerate(ids):
             self.assertIn(f"walks/{ident}/read.md", files)
             self.assertIn(f"({ident}/read.md)", files["walks/README.md"])
-            self.assertTrue(any(name.startswith("site/" if not number else f"sites/{ident}/") for name in files), ident)
+            self.assertTrue(any(name.startswith("site/" if not number else f"site/{ident}/") for name in files), ident)
         self.assertNotIn("walk.md", files)
         self.assertEqual(files["toc.toml"], (self.folder / "toc.toml").read_text())
         for name, text in files.items():
@@ -245,6 +246,28 @@ class Class(unittest.TestCase):
         self.assertNotIn("edited by hand", again.stdout)
         self.assertEqual(git(self.walk, "status", "--porcelain", "--untracked-files=all"), "")
         self.assertEqual(git(self.walk, "rev-parse", "HEAD"), head)
+
+    def test_the_old_sites_go(self) -> None:
+        "Over the layout of before, with a website for each walk in sites/ID/, walk-update removes the files that it made there, and keeps the rest."
+        clone = self.walk_clone("old-sites")
+        made = {"sites/tests/_smalldocs.yml": f"# {render.MADE}\n", "sites/tests/styles.css": f"/* {render.MADE} */\n",
+                "sites/tests/index.qmd": f"<!-- {render.MADE} -->\n", "sites/tests/read/step-01.qmd": f"<!-- {render.MADE} -->\n",
+                "sites/gone/build/step-02.qmd": f"<!-- {render.MADE} -->\n"}
+        mine = {"sites/tests/notes.qmd": "Mine.\n", "sites/own.css": "/* mine */\n"}
+        for name, text in {**made, **mine}.items():
+            (clone / name).parent.mkdir(parents=True, exist_ok=True)
+            (clone / name).write_text(text)
+        git(clone, "add", "-A")
+        git(clone, "commit", "--quiet", "-m", "The websites of before")
+        done = self.walk_update("--repo", str(self.repo), walk=clone)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for name in made:
+            self.assertFalse((clone / name).exists(), name)
+        for name, text in mine.items():
+            self.assertEqual((clone / name).read_text(), text, name)
+        self.assertFalse((clone / "sites" / "gone").exists(), "a folder that held only made files goes")
+        self.assertFalse((clone / "sites" / "tests" / "read").exists())
+        self.assertTrue((clone / "site" / "tests" / "index.qmd").is_file())
 
     def test_old_templates_replaced_hand_edits_kept(self) -> None:
         if not (KIT / ".git").exists():

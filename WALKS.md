@@ -795,17 +795,21 @@ give the class a `toc.toml` with one walk. See [The table of contents](#the-tabl
 | `walks/README.md` | A list of every walk, with a link to each of its pages and to its website |
 | `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
-| `site/` | The website of the first walk, for smalldocs: a front page that explains the two ways and links to the website of each other walk, and a page for each part in `read/` and in `build/` |
-| `sites/ID/` | The website of each other walk. Its front page links back to the website of the first walk |
-| `.github/workflows/pages.yml` | The workflow that builds the websites and publishes them on GitHub Pages |
+| `site/` | The website, one smalldocs project with one `_smalldocs.yml` and a sidebar for each walk. The first walk's pages are at the top: a front page that explains the two ways and links to each other walk, and a page for each part in `read/` and in `build/` |
+| `site/ID/` | The pages of each other walk, in the same shape. Its front page links back to the first walk |
+| `.github/workflows/pages.yml` | The workflow that builds the website and publishes it on GitHub Pages |
 
 Do not edit a page by hand. Its first line says that `render.py` made it, and the next `just walk-update` makes it
-again. Edit the notes in the class folder. A walk after the first cannot have the id `read`, `build` or
-`site_libs`, because the website of the first walk has folders with those names.
+again. Edit the notes in the class folder. A walk after the first cannot have the id `read`, `build`, `index`,
+`site_libs` or `search.json`, because the first walk has those names at the top of `site/` and of the built website.
+Nor can it have an id that starts with `_`, or one of `env`, `venv`, `renv`, `node_modules`, `site-packages` and
+`__pycache__`, because smalldocs leaves out a folder with such a name.
+A `just walk-update` removes the pages that an earlier one wrote in `sites/ID/`, where each other walk had a website
+of its own.
 
 ### Turn on GitHub Pages
 
-On each push to `main`, the workflow builds `site/` and every folder in `sites/` with smalldocs. GitHub Pages then
+On each push to `main`, the workflow builds `site/` with smalldocs. GitHub Pages then
 publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
 `https://OWNER.github.io/bla-walk/ID/`. An owner with a custom domain gets that domain in place of `OWNER.github.io`.
 The workflow publishes nothing when `site/` is missing. Do these steps once for each walk repository:

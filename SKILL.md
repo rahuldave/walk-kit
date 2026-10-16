@@ -129,7 +129,7 @@ under What changed. README.md says how a class made before `just style` gets the
    1. It runs `timewalk-export --json` for each walk, and refuses if `timewalk-check` finds an error.
    2. It renders every page with `scripts/render.py` before the first write.
    3. It writes `walks/ID/read.md` and `walks/ID/build.md`, and `walks/README.md`, the list of every walk's pages.
-      It writes the website of the first walk in `site/`, and that of each other walk in `sites/ID/`.
+      It writes the website in `site/`: the first walk's pages at the top, and each other walk's in `site/ID/`.
    4. It removes its own pages that the walks no longer have, and never writes over a file that it did not make.
    5. It says how many problems the checks of the pages find. `just check` lists them.
 
@@ -153,7 +153,7 @@ under What changed. README.md says how a class made before `just style` gets the
    - `just check-pdf` checks that no slide is cut off. The last words of every slide must be in the PDF's text
 
 7. **Publish the pages.** `just walk-init` writes the workflow `.github/workflows/pages.yml` into the walk
-   repository, and `just walk-update` keeps it up to date. On each push to `main`, it builds the websites with
+   repository, and `just walk-update` keeps it up to date. On each push to `main`, it builds the website with
    smalldocs and publishes them on GitHub Pages. In the settings of the walk repository on GitHub, under **Pages**,
    set the source to **GitHub Actions** once. WALKS.md, in "The pages that students read", says what the pages
    hold, what each check reports, and how a class made before the pages gets the checks.

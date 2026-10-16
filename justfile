@@ -40,7 +40,7 @@ test:
         python3 scripts/follow.py "$page" --repo "$class/repo" --work "$scratch/work/$id" || failed=1
     done
     # Each part page of each walk's website, as a student who starts at that part
-    for page in "$scratch"/pages/site/build/*.qmd "$scratch"/pages/sites/*/build/*.qmd; do
+    for page in "$scratch"/pages/site/build/*.qmd "$scratch"/pages/site/*/build/*.qmd; do
         [ -f "$page" ] || continue
         name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
         echo "test: part page $name"
@@ -49,7 +49,7 @@ test:
     # Each page to read, Read the tutorial and a narrative's, on GitHub and on the website: nothing to run, every move, every link
     shopt -s nullglob
     echo "test: the pages to read"
-    python3 scripts/read_check.py "$scratch"/pages/walks/*/read.md "$scratch"/pages/site/read/*.qmd "$scratch"/pages/sites/*/read/*.qmd \
+    python3 scripts/read_check.py "$scratch"/pages/walks/*/read.md "$scratch"/pages/site/read/*.qmd "$scratch"/pages/site/*/read/*.qmd \
         --repo "$class/repo" --toc "$class/toc.toml" || failed=1
     exit "$failed"
 
@@ -71,13 +71,13 @@ test-github walk=test_walk:
         echo "test-github: walk $id"
         python3 scripts/follow.py "$page" --repo "$scratch/repo" --work "$scratch/work/$id" --github 2>&1 | tail -1 || { echo "test-github: FAIL $id"; failed=1; }
     done
-    for page in "$pages"/site/build/*.qmd "$pages"/sites/*/build/*.qmd; do
+    for page in "$pages"/site/build/*.qmd "$pages"/site/*/build/*.qmd; do
         name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
         echo "test-github: part page $name"
         python3 scripts/follow.py "$page" --repo "$scratch/repo" --work "$scratch/work/part-$name" --github 2>&1 | tail -1 || { echo "test-github: FAIL $name"; failed=1; }
     done
     echo "test-github: the pages to read"
-    python3 scripts/read_check.py "$pages"/walks/*/read.md "$pages"/site/read/*.qmd "$pages"/sites/*/read/*.qmd \
+    python3 scripts/read_check.py "$pages"/walks/*/read.md "$pages"/site/read/*.qmd "$pages"/site/*/read/*.qmd \
         --repo "$scratch/repo" --github || failed=1
     exit "$failed"
 

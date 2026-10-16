@@ -56,7 +56,7 @@ first `just present`.
 ├── walk.md        the notes of every step, tracked in your fork. With toc.toml, the notes that it names
 ├── toc.toml       only with several walks: the list of walks, and where the notes of each are
 ├── walks/         the pages of each walk to read on GitHub, walks/ID/read.md and walks/ID/build.md
-├── site/, sites/  the same pages as a website, which the Pages workflow publishes
+├── site/          the same pages as a website, which the Pages workflow publishes
 ├── slides/        the slides, and slides.toml, which says which slides show at which step
 ├── justfile       the recipes: present, setup, pdf
 ├── repo/          ignored: your clone of @project@

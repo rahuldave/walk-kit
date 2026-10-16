@@ -38,7 +38,8 @@ author ran, and gives the take's command; a later do$ line that joins the take d
 a program, so the page gives it, and the take's command after it (`after`). A step of one commit has takes too.
 
 `--pages DIR` writes the pages of every walk of a class into DIR as walk-update lays them out in the walk repository:
-`walks/ID/` for the Markdown, `site/` for the first walk's website and `sites/ID/` for the others, and `walks/README.md`.
+`walks/ID/` for the Markdown, `site/` for the website (the first walk's pages at the top, each other walk's in `site/ID/`),
+and `walks/README.md`.
 
 `--check` reports facts made without running the do$ lines, and the words of timewalk in the text that a reader sees. `--class` does the same for every walk that gets pages, with the facts from timewalk, and
 also checks the rendered pages against the writing guide. The exit code is 1 if it finds a problem. `walk_update.py`
@@ -80,9 +81,10 @@ LOCKS = {"uv.lock", "poetry.lock", "Pipfile.lock", "package-lock.json", "yarn.lo
 OUR_WORDS = re.compile(r"(?<![\w-])(?i:steps?|commits?)(?!\w|-[A-Za-z])|(?:(?<=[a-z,;:] )|(?<=[a-z,;:] \*\*)|(?<=[(\[]))Start\b")
 CHANGE_OF = re.compile(r"\b([Tt]he change of) `([^`]+)`")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
-SITE_TAKEN = {"read", "build", "site_libs"}  # folders of the first walk's built site: no other walk's site may have these ids
+SITE_TAKEN = {"read", "build", "index", "site_libs", "search.json"}  # names at the top of site/ and its built site: no other walk may have these ids
+SMALLDOCS_SKIPS = {"node_modules", "venv", "env", "renv", "site-packages", "__pycache__"}  # folders that smalldocs leaves out, as its SKIP_DIRS
 PAGE_GLOBS = ("walks/README.md", "walks/*/read.md", "walks/*/build.md", "site/**/*.qmd", "site/*.yml", "site/*.css",
-              "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, for a later run to remove
+              "sites/**/*.qmd", "sites/*/*.yml", "sites/*/*.css")  # every page that class_pages writes, and wrote before in sites/, for a later run to remove
 
 
 def slug(
@@ -881,11 +883,43 @@ def markdown_files(
 
 def site_files(
     facts: dict,  # The facts of the walk
-    others: list[dict] = (),  # For the first walk's site: the walk of each other walk of the class (its id, title and description)
-    home: dict | None = None,  # For another walk's site: the first walk, whose site is one folder up
-) -> dict[str, str]:  # Each file of the website, by its path in the site's folder
-    """Write the website: a front page that explains the ways of reading, and a page for each part in each way. The
-    Pages workflow puts each other walk's site at ID/ under the first's, so the links between them are relative."""
+    others: list[dict] = (),  # For the first walk's site: the facts of each other walk of the class
+    home: dict | None = None,  # For another walk's pages: the first walk, whose pages are one folder up
+) -> dict[str, str]:  # Each file of the website, by its path in site/; for another walk, by its path in site/ID/
+    """Write the pages of a walk on the website: a front page that explains the ways of reading, and a page for each part
+    in each way. The website is one smalldocs project in site/: the first walk's pages at the top, each other walk's in
+    ID/, and one _smalldocs.yml with a sidebar for each walk, which the first walk's files hold."""
+    files, sidebar = walk_site(facts, [f["walk"] for f in others], home)
+    if home:
+        return files
+    title = facts["walk"]["title"]
+    render = ["index.qmd", *(f"{WAYS[m][1]}/*.qmd" for m in ways(facts))]
+    sidebars = ["  - title: " + json.dumps(title), "    style: docked", "    contents:", *sidebar]
+    for other in others:
+        ident = other["walk"]["id"]
+        _, more = walk_site(other, [], facts["walk"], f"{ident}/")
+        render += [f"{ident}/index.qmd", *(f"{ident}/{WAYS[m][1]}/*.qmd" for m in ways(other))]
+        sidebars += ["  - title: " + json.dumps(other["walk"]["title"]), "    style: docked", "    contents:", *more]
+    pages = ", ".join(json.dumps(p) for p in render)
+    files["_smalldocs.yml"] = "\n".join([
+        f"# {MADE}", "project:", "  type: website", "  output-dir: _site", f"  render: [{pages}]   # only these pages", "",
+        "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", "  sidebar:",
+        *("  " + line for line in "\n".join(sidebars).split("\n")), "", "theme: cosmo", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
+        "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens", ""])
+    files["styles.css"] = (f"/* {MADE} */\n/* Inline code keeps the code font, without the shaded box and the colour the theme gives it. */\n"
+                           "code:not(pre code) {\n  background-color: transparent !important;\n  color: inherit !important;\n"
+                           "  padding: 0 !important;\n}\n/* What changed: the diffs fold, and open one at a time. */\n"
+                           "details { margin: 0.5em 0; }\ndetails > summary { cursor: pointer; }\n")
+    return files
+
+
+def walk_site(
+    facts: dict,  # The facts of the walk
+    others: list[dict] = (),  # For the first walk: the walk of each other walk of the class (its id, title and description)
+    home: dict | None = None,  # For another walk: the first walk, whose pages are one folder up
+    prefix: str = "",  # Where the walk's pages are in site/: "" for the first walk, ID/ for another
+) -> tuple[dict[str, str], list[str]]:  # Each page of the walk, by its path in its folder; and the lines of its sidebar in _smalldocs.yml
+    """Write a walk's front page and part pages, and its sidebar, whose links are from the top of site/."""
     title = facts["walk"]["title"]
     files: dict[str, str] = {}
     front = [f"<!-- {MADE} -->", ""]
@@ -893,7 +927,7 @@ def site_files(
         front += [(f"This walk is one of several through the project. The website of the first, [{bracketed(home['title'])}](../), "
                    "lists them all."), ""]
     front += [*intro_lines(facts, "watch"), ""]
-    sidebar = ["      - index.qmd"]
+    sidebar = [f"      - {prefix}index.qmd"]
     if len(ways(facts)) > 1:
         front += ["There are two ways to read this tutorial. Both have the same parts, in the same order.", ""]
     front += [WHAT_CHANGED + (f" In Build it yourself, {CHECK_AGAINST}" if len(ways(facts)) > 1 else ""), "",
@@ -914,11 +948,11 @@ def site_files(
             files[page] = f"---\ntitle: {json.dumps(label)}\n---\n\n<!-- {MADE} -->\n\n{switch}{body}"
             front.append(f"- [{bracketed(label)}]({page})")
             if stop["moves"]:
-                sidebar += [f"          - section: {json.dumps(label)}", f"            href: {page}", "            contents:"]
+                sidebar += [f"          - section: {json.dumps(label)}", f"            href: {prefix}{page}", "            contents:"]
                 sidebar += [f"              - text: {json.dumps((m['number'] + ' ' + m['title']).strip())}\n"
-                            f"                href: {page}#{anchor(m['name'])}" for m in stop["moves"]]
+                            f"                href: {prefix}{page}#{anchor(m['name'])}" for m in stop["moves"]]
             else:
-                sidebar += [f"          - text: {json.dumps(label)}\n            href: {page}"]
+                sidebar += [f"          - text: {json.dumps(label)}\n            href: {prefix}{page}"]
         front.append("")
     if others:
         front += ["## The other walks", "", "Each other walk through the project has a website of its own:", ""]
@@ -926,17 +960,7 @@ def site_files(
                   for other in others]
         front.append("")
     files["index.qmd"] = f"---\ntitle: {json.dumps(title)}\n---\n\n" + squeeze(front)
-    pages = ", ".join(json.dumps(p) for p in ["index.qmd", *(f"{WAYS[m][1]}/*.qmd" for m in ways(facts))])
-    files["_smalldocs.yml"] = "\n".join([
-        f"# {MADE}", "project:", "  type: website", "  output-dir: _site", f"  render: [{pages}]   # only these pages", "",
-        "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", "  sidebar:", "    style: docked",
-        "    contents:", *sidebar, "", "theme: cosmo", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
-        "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens", ""])
-    files["styles.css"] = (f"/* {MADE} */\n/* Inline code keeps the code font, without the shaded box and the colour the theme gives it. */\n"
-                           "code:not(pre code) {\n  background-color: transparent !important;\n  color: inherit !important;\n"
-                           "  padding: 0 !important;\n}\n/* What changed: the diffs fold, and open one at a time. */\n"
-                           "details { margin: 0.5em 0; }\ndetails > summary { cursor: pointer; }\n")
-    return files
+    return files, sidebar
 
 
 def squeeze(
@@ -1064,8 +1088,12 @@ def class_pages(
     with tempfile.TemporaryDirectory() as scratch:
         for number, entry in enumerate(page_walks(toc)):
             ident = entry["id"]
-            if number and ident in SITE_TAKEN:
-                raise PagesError(f"walk {ident}: the first walk's site has a folder {ident}, so this walk's site cannot have that id. Give it another id")
+            if number and ident.casefold() in SITE_TAKEN:   # casefold: a folder Read is read/ on a Mac
+                raise PagesError(f"walk {ident}: the website has {ident} at the top of site/ for the first walk, so this walk's pages cannot "
+                                 f"go in site/{ident}/. Give the walk another id")
+            if number and (ident.startswith(("_", ".")) or ident.casefold() in SMALLDOCS_SKIPS):
+                raise PagesError(f"walk {ident}: smalldocs leaves out a folder site/{ident}/, as it leaves out one that starts with _ or ., "
+                                 f"or is named {', '.join(sorted(SMALLDOCS_SKIPS))}. Give the walk another id")
             facts = export(repo, toc, ident, github, Path(scratch), timewalk)
             if facts["errors"]:
                 raise PagesError(f"timewalk-check finds errors in walk {ident}. Run just check:\n  " + "\n  ".join(facts["errors"]))
@@ -1078,9 +1106,9 @@ def class_pages(
             sites.append(facts)
             on_github = ", ".join(f"[{WAYS[mode][0]}]({ident}/{WAYS[mode][1]}.md)" for mode in ways(facts))   # from walks/README.md
             listed.append(f"- **{facts['walk']['title']}**. {on_github}. [Its website]({site}/{'' if not number else ident + '/'}).")
-    for number, facts in enumerate(sites):   # the first walk's site lists the others, at ID/ under it; each other links back
-        folder = "site" if not number else f"sites/{facts['walk']['id']}"
-        for name, text in site_files(facts, [f["walk"] for f in sites[1:]] if not number else [], sites[0]["walk"] if number else None).items():
+    for number, facts in enumerate(sites):   # one website in site/: the first walk's pages list the others, in ID/; each other links back
+        folder = "site" if not number else f"site/{facts['walk']['id']}"
+        for name, text in site_files(facts, sites[1:] if not number else [], sites[0]["walk"] if number else None).items():
             pages[f"{folder}/{name}"] = text
     pages["walks/README.md"] = "\n".join([
         f"<!-- {MADE} -->", "", f"# The walks through {project}", "",

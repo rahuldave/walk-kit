@@ -661,26 +661,63 @@ class StrictUv(Case):
 
 
 class WalkSites(unittest.TestCase):
-    "The first walk's website lists the other walks, whose sites the Pages workflow puts at ID/ under it."
+    "One website in site/: the first walk's pages at the top, each other walk's in site/ID/, and one _smalldocs.yml."
 
-    def test_links(self) -> None:
-        "class_pages links the first site to each other walk at ID/, and each other site back to ../."
-        def facts(ident: str, title: str, description: str) -> dict:
-            walk = {"id": ident, "title": title, "description": description, "kind": "narrative", "mode": "watch", "github": "https://github.com/o/demo"}
-            return {"walk": walk, "intro": [], "stops": [], "history": {}, "errors": [], "observed": True}
+    @staticmethod
+    def facts(ident: str, title: str, description: str) -> dict:
+        "The facts of a narrative with no stops."
+        walk = {"id": ident, "title": title, "description": description, "kind": "narrative", "mode": "watch", "github": "https://github.com/o/demo"}
+        return {"walk": walk, "intro": [], "stops": [], "history": {}, "errors": [], "observed": True}
 
-        walks = {"first": facts("first", "The first", "One."), "second": facts("second", "The [second]", "Two"), "third": facts("third", "Third", "")}
+    def pages(self, walks: dict) -> dict[str, str]:
+        "Render the pages of these walks, in order."
         with mock.patch.object(render, "export", lambda repo, toc, ident, *args: walks[ident]), \
                 mock.patch.object(render, "toml_edits", lambda *args: {}), \
                 mock.patch.object(render, "page_walks", lambda toc: [{"id": ident} for ident in walks]):
             pages, _, _ = render.class_pages(Path("toc.toml"), Path("."), "https://github.com/o/demo")
+        return pages
+
+    def test_one_project(self) -> None:
+        "One _smalldocs.yml renders every walk's pages, with a sidebar of its own for each walk, whose links are from site/."
+        walks = {"first": self.facts("first", "The first", "One."), "second": self.facts("second", "Second", "Two.")}
+        walks["second"]["stops"] = [{"name": "step-01", "number": "1", "title": "One", "moves": [], "parts": [], "commit": "0" * 40}]
+        with mock.patch.object(render, "stop_page", lambda *args: ["Text."]):
+            pages = self.pages(walks)
+        self.assertEqual([name for name in pages if name.endswith(".yml")], ["site/_smalldocs.yml"])
+        self.assertEqual([name for name in pages if name.endswith(".css")], ["site/styles.css"])
+        self.assertFalse(any(name.startswith("sites/") for name in pages))
+        self.assertIn("site/second/read/step-01.qmd", pages)
+        config = pages["site/_smalldocs.yml"]
+        self.assertIn('  render: ["index.qmd", "read/*.qmd", "second/index.qmd", "second/read/*.qmd"]', config)
+        self.assertIn('website:\n  title: "The first"\n', config)
+        self.assertIn('  sidebar:\n    - title: "The first"\n      style: docked\n      contents:\n        - index.qmd\n', config)
+        self.assertIn('    - title: "Second"\n      style: docked\n      contents:\n        - second/index.qmd\n', config)
+        self.assertIn('            - text: "1 One"\n              href: second/read/step-01.qmd\n', config)
+
+    def test_an_id_that_clashes(self) -> None:
+        "A walk after the first may not have an id that the first walk uses at the top of site/, in any case."
+        for ident in ("read", "build", "index", "site_libs", "search.json", "Read"):
+            walks = {"first": self.facts("first", "The first", ""), ident: self.facts(ident, "Other", "")}
+            with self.assertRaisesRegex(render.PagesError, f"walk {re.escape(ident)}: the website has"):
+                self.pages(walks)
+        for ident in ("_x", "env", "Venv", "node_modules"):   # folders that smalldocs leaves out
+            walks = {"first": self.facts("first", "The first", ""), ident: self.facts(ident, "Other", "")}
+            with self.assertRaisesRegex(render.PagesError, f"walk {re.escape(ident)}: smalldocs leaves out"):
+                self.pages(walks)
+        self.assertIn("site/tests/index.qmd", self.pages({"first": self.facts("first", "The first", ""), "tests": self.facts("tests", "T", "")}))
+
+    def test_links(self) -> None:
+        "class_pages links the first walk's front page to each other walk at ID/, and each other walk's back to ../."
+        facts = self.facts
+        walks = {"first": facts("first", "The first", "One."), "second": facts("second", "The [second]", "Two"), "third": facts("third", "Third", "")}
+        pages = self.pages(walks)
         front = pages["site/index.qmd"]
         self.assertIn("- [The \\[second\\]](second/index.html). Two.", front)
         self.assertIn("- [Third](third/index.html).", front)
         self.assertNotIn("](first/", front)
         for ident in ("second", "third"):
-            self.assertIn("[The first](../)", pages[f"sites/{ident}/index.qmd"])
-            self.assertNotIn("The other walks", pages[f"sites/{ident}/index.qmd"])
+            self.assertIn("[The first](../)", pages[f"site/{ident}/index.qmd"])
+            self.assertNotIn("The other walks", pages[f"site/{ident}/index.qmd"])
 
 
 class OurWords(unittest.TestCase):

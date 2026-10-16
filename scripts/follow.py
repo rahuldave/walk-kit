@@ -335,11 +335,12 @@ def report_name(
     page: Path,  # The page that was followed
 ) -> str:  # The path of its report in reports/follow, without .md
     """Name the report of a page, so that the pages of two walks never share a report: walks/ID/build.md gives ID-build,
-    a page of the first walk's website site/build/PART.qmd gives site/build/PART, and of another's, sites/ID/build/PART.qmd,
-    sites/ID/build/PART."""
+    a page of the first walk's on the website site/build/PART.qmd gives site/build/PART, and of another's, site/ID/build/PART.qmd,
+    site/ID/build/PART."""
     root = page.parent.parent
     if page.parent.name == "build" and (root / "index.qmd").is_file():
-        return f"sites/{root.name}/build/{page.stem}" if root.parent.name == "sites" else f"site/build/{page.stem}"
+        other = not (root / "_smalldocs.yml").is_file() and (root.parent / "_smalldocs.yml").is_file()
+        return f"site/{root.name}/build/{page.stem}" if other else f"site/build/{page.stem}"
     return f"{page.parent.name}-{page.stem}"
 
 

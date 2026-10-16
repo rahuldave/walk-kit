@@ -1,6 +1,6 @@
-# The website of the walk: on every push to main, smalldocs builds site/, and GitHub Pages publishes it. The site of
-# each other walk, from sites/ID, goes at ID/ under it. The walk skill's walk-update writes site/ and sites/ from the
-# notes. In the repository's settings on GitHub, under Pages, set the source to GitHub Actions once.
+# The website of the walks: on every push to main, smalldocs builds site/, and GitHub Pages publishes it. site/ is one
+# project: the first walk's pages at the top, and each other walk's in site/ID/. The walk skill's walk-update writes
+# site/ from the notes. In the repository's settings on GitHub, under Pages, set the source to GitHub Actions once.
 name: Pages
 
 on:
@@ -33,13 +33,6 @@ jobs:
       - if: steps.site.outputs.pages == 'yes'
         run: |
           uvx --from 'smalldocs>=0.1.5' smalldocs render site
-          for other in sites/*/; do
-            [ -d "$other" ] || continue  # no other walk: the glob stays as written
-            id=$(basename "$other")
-            uvx --from 'smalldocs>=0.1.5' smalldocs render "sites/$id"
-            mkdir -p "site/_site/$id"
-            cp -R "sites/$id/_site/." "site/_site/$id/"
-          done
       - if: steps.site.outputs.pages == 'yes'
         uses: actions/configure-pages@v6
       - if: steps.site.outputs.pages == 'yes'

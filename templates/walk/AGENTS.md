@@ -15,7 +15,7 @@ forks it, runs `just present`, and opens the address that timewalk prints.
   needs from it, delete it, and run `git -C repo worktree prune`. The next `just present` makes a clone.
 - In a tutorial, a step has moves, the small commits between two tags. The moves go in order. To go back, use
   **Restart step**, and then `just setup`.
-- `walks/`, `site/` and `sites/` hold the pages to read without timewalk, and `.github/workflows/pages.yml`
+- `walks/` and `site/` hold the pages to read without timewalk, and `.github/workflows/pages.yml`
   publishes the website. The teacher's `just walk-update` makes them from the notes. Do not edit them by hand.
 - `just pdf` makes `build/walk.pdf`, the slides, one page each. The notes are not in it. Git ignores it.
 - Do not change `justfile` or `.gitignore` for one student's needs. The teacher's class material makes them.

@@ -106,9 +106,9 @@ by its old path gets the command for the new path, which renames the file.
 | `walks/README.md` | A list of every walk, with a link to each of its pages and to its website |
 | `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
-| `site/` | The website of the first walk |
-| `sites/ID/` | The website of each other walk |
-| `.github/workflows/pages.yml` | The workflow that builds the websites with smalldocs, and publishes them on GitHub Pages |
+| `site/` | The website, with the pages of the first walk at the top |
+| `site/ID/` | The pages of each other walk on the website |
+| `.github/workflows/pages.yml` | The workflow that builds the website with smalldocs, and publishes it on GitHub Pages |
 
 GitHub Pages publishes the first walk at `https://OWNER.github.io/bla-walk/`, and each other walk at
 `https://OWNER.github.io/bla-walk/ID/`. An owner with a custom domain gets that domain in place of `OWNER.github.io`.

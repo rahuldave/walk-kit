@@ -360,10 +360,11 @@ class Site(Case):
         self.assertEqual(self.check(page), [])
 
     def test_the_sites_put_together(self) -> None:
-        "Each other walk's site goes at ID/ under the first's: a link between them resolves there, and a link to a walk without a site does not."
-        other = self.site.parent / "sites" / "x"
+        "Each other walk's pages are at ID/ in the one website: a link between them resolves there, and a link to a walk without pages does not."
+        other = self.site / "x"
         (other / "read").mkdir(parents=True)
-        (other / "_smalldocs.yml").write_text('project:\n  type: website\n  render: ["index.qmd"]\nwebsite:\n  title: "X"\n')
+        config = self.site / "_smalldocs.yml"
+        config.write_text(config.read_text().replace("render: [", 'render: ["x/index.qmd", ', 1))
         (other / "index.qmd").write_text('---\ntitle: "X"\n---\n\nThe [first walk](../) lists them all.\n')
         index = self.site / "index.qmd"
         index.write_text(index.read_text() + "\nThe other walk: [X](x/).\n")
@@ -444,7 +445,7 @@ class TimewalkTest(unittest.TestCase):
             done = subprocess.run([sys.executable, str(KIT / "scripts" / "render.py"), "--class", str(folder), "--repo", str(folder / "repo"),
                                    "--github", "https://github.com/rahuldave/tally", "--pages", str(pages)], capture_output=True, text=True, check=False)
             self.assertEqual(done.returncode, 0, done.stderr)
-            read = sorted(pages.glob("walks/*/read.md")) + sorted(pages.glob("site/read/*.qmd")) + sorted(pages.glob("sites/*/read/*.qmd"))
+            read = sorted(pages.glob("walks/*/read.md")) + sorted(pages.glob("site/read/*.qmd")) + sorted(pages.glob("site/*/read/*.qmd"))
             self.assertGreater(len(read), 10)
             done = subprocess.run([sys.executable, str(KIT / "scripts" / "read_check.py"), *map(str, read), "--repo", str(folder / "repo"),
                                    "--toc", str(folder / "toc.toml")], capture_output=True, text=True, check=False)

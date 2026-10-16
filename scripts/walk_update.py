@@ -540,8 +540,9 @@ def plan_pages(
 ) -> tuple[dict[Path, str], list[Path]]:  # The pages to write, and the pages of an earlier run to remove
     """Render the pages that students read without timewalk, from the facts that timewalk-export --json gives for each walk.
 
-    The Markdown pages of a walk go in walks/ID/: read.md, and build.md for a tutorial. The website of the first walk goes
-    in site/, and that of every other walk in sites/ID/; the Pages workflow publishes them. walks/README.md lists them all,
+    The Markdown pages of a walk go in walks/ID/: read.md, and build.md for a tutorial. The website is one smalldocs
+    project in site/: the first walk's pages at the top, and every other walk's in site/ID/; the Pages workflow publishes
+    it. The pages that an earlier walk-update wrote in sites/ID/ are removed. walks/README.md lists them all,
     and the README links to it. Nothing is written here."""
     if not args.toc or not args.repo:
         args.notices.append("the pages to read without timewalk need --toc and --repo, so there are none" if args.toc else
@@ -599,6 +600,9 @@ def write_pages(
         write(walk, path, text)
     for old in stale:
         target(walk, old).unlink()
+    for folder in sorted({up for old in stale for up in old.parents if within(up, walk) and up != walk}, key=lambda p: -len(p.parts)):
+        if folder.is_dir() and not folder.is_symlink() and not any(folder.iterdir()):   # a folder that held only old pages, as sites/ID/
+            target(walk, folder).rmdir()
     if pages:
         print(f"walk-update: wrote {len(pages)} pages to read without timewalk" + (f", and removed {len(stale)} old ones" if stale else ""))
     return list(pages)

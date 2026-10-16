@@ -137,7 +137,7 @@ follow *args:
             ${check[@]+"${check[@]}"} "$@" || failed=1
     done
     # A part page has the same text as its part of build.md, so the model does not check it again
-    for page in "$out"/site/build/*.qmd "$out"/sites/*/build/*.qmd; do
+    for page in "$out"/site/build/*.qmd "$out"/site/*/build/*.qmd; do
         name=$(basename "$(dirname "$(dirname "$page")")")-$(basename "$page" .qmd)
         echo "follow: part page $name"
         python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/part-$name" --log "build/follow/part-$name.md" "$@" \
@@ -147,7 +147,7 @@ follow *args:
     online=()
     for word in "$@"; do if [ "$word" = --github ]; then online=(--github); fi; done
     echo "follow: the pages to read"
-    python3 "$skill/scripts/read_check.py" "$out"/walks/*/read.md "$out"/site/read/*.qmd "$out"/sites/*/read/*.qmd --repo {{ quote(repo) }} \
+    python3 "$skill/scripts/read_check.py" "$out"/walks/*/read.md "$out"/site/read/*.qmd "$out"/site/*/read/*.qmd --repo {{ quote(repo) }} \
         --toc toc.toml --project-url "https://github.com/{{ upstream }}/{{ project }}" ${online[@]+"${online[@]}"} || failed=1
     exit "$failed"
 

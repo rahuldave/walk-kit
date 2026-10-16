@@ -3,7 +3,7 @@
     python3 read_check.py PAGE... [--repo DIR] [--toc FILE] [--facts FILE] [--github]
 
 PAGE is a page to read that render.py wrote: `walks/ID/read.md` for GitHub, or a page of a website in `read/`, in
-`site/` or `sites/ID/`. A narrative's pages are pages to read too. The script checks four things:
+`site/` or `site/ID/`. A narrative's pages are pages to read too. The script checks four things:
 
 1. **Nothing to run.** The page has no `git check`, no `curl ... | git apply`, no command that takes the files of a
    commit (`git restore --source ...`), and no text of Build it yourself, such as Get the project or "Check your files
@@ -16,14 +16,13 @@ PAGE is a page to read that render.py wrote: `walks/ID/read.md` for GitHub, or a
 3. **Every link resolves.** A link to another page, or to an anchor `#id`, finds that page and that id. An id is
    given once in a page. With `--github`, every link to github.com answers a HEAD request with 200, and every commit
    that a link names is in `--repo`.
-4. **The website builds.** smalldocs (`uvx --from 'smalldocs>=0.1.5' smalldocs render`) builds the walk's website in a
-   scratch copy, with no error and no warning. The built sites are put together as the Pages workflow publishes them:
-   the first walk's site at the top, and each other walk's at `ID/`. Every page that `_smalldocs.yml` lists is built,
-   and every link of every built page resolves there, its id too. A warning of smalldocs about a link to another walk's
-   site counts only when the link does not resolve there.
+4. **The website builds.** smalldocs (`uvx --from 'smalldocs>=0.1.5' smalldocs render`) builds the website, one project
+   in `site/`, in a scratch copy, with no error and no warning: the first walk's pages at the top, and each other
+   walk's at `ID/`. Every page of the walk that `_smalldocs.yml` lists is built, and every link of every built page of
+   the walk resolves there, its id too.
 
 The facts come from `timewalk-export --json`, as render.py gets them, with the project from `--repo` and the walks
-from `--toc` (by default `toc.toml` in the folder above `walks/`, `site/` and `sites/`). `--facts FILE` gives the facts
+from `--toc` (by default `toc.toml` in the folder above `walks/` and `site/`). `--facts FILE` gives the facts
 of one walk instead, for every page.
 
 The script prints one line for each page and one for the websites, each problem as `PAGE:LINE: what is wrong`, and last
@@ -254,8 +253,8 @@ class Checker:
         self.given = render.load(facts) if facts else None
         self.problems: list[str] = []
         self.walks: dict[tuple[str, str], dict | None] = {}  # the facts of each walk, by its toc and id
-        self.sites: dict[Path, tuple[Path, str, list[str]] | None] = {}  # each website built: its tree, its folder in it, and what smalldocs warned
-        self.trees: dict[Path, Path] = {}  # the websites of each folder of pages put together, as the Pages workflow publishes them
+        self.sites: dict[Path, tuple[Path, str, list[str]] | None] = {}  # each walk's pages built: the website, the walk's folder in it, what smalldocs warned of them
+        self.trees: dict[Path, tuple[Path, list[str]] | None] = {}  # each website built once, by its folder site/: its built tree, and what smalldocs warned
         self.parsed: dict[Path, Ids] = {}  # the ids and links of each built page read
         self.pending: list[tuple[Text, Path]] = []  # each page of a website, with its site, whose links finish() checks
         self.scratch = Path(tempfile.mkdtemp(prefix="read_check-"))
@@ -280,16 +279,16 @@ class Checker:
         self,
         page: Path,  # A page to read
     ) -> tuple[Path, str | None, Path | None]:  # The folder of the pages, the id of the walk (None: the first walk), and the website's folder
-        "Find the walk of a page from its path: walks/ID/read.md, site/read/X.qmd or sites/ID/read/X.qmd."
+        "Find the walk of a page from its path: walks/ID/read.md, site/read/X.qmd or site/ID/read/X.qmd."
         if page.suffix == ".md":
             root, ident = page.parent.parent.parent, page.parent.name
-            if (root / "sites" / ident).is_dir():
-                return root, ident, root / "sites" / ident
             toc = self.toc or root / "toc.toml"
             first = render.page_walks(toc)[0]["id"] if toc.is_file() and render.page_walks(toc) else None
+            if ident != first and ident.casefold() not in render.SITE_TAKEN and (root / "site" / ident / "index.qmd").is_file():
+                return root, ident, root / "site" / ident
             return root, ident, root / "site" if (root / "site").is_dir() and first in (ident, None) else None
         site = page.parent.parent
-        if site.parent.name == "sites":
+        if not (site / "_smalldocs.yml").is_file() and (site.parent / "_smalldocs.yml").is_file():   # another walk's, in site/ID/
             return site.parent.parent, site.name, site
         return site.parent, None, site
 
@@ -573,7 +572,7 @@ class Checker:
         site: Path,  # The folder of a walk's website
         facts: dict | None,  # The facts of its walk
     ) -> None:
-        """Build a website once with smalldocs, in a scratch copy, and put it where the Pages workflow does: the first walk's at the top, another's at ID/."""
+        """Build the website that holds a walk's pages once with smalldocs, in a scratch copy, and keep what it warned of the walk's pages."""
         if site in self.sites:
             return
         self.sites[site] = None
@@ -581,21 +580,27 @@ class Checker:
             for stop in facts["stops"]:
                 if not (site / "read" / f"{render.slug(stop['name'])}.qmd").is_file():
                     self.problem(str(site), f"no page read/{render.slug(stop['name'])}.qmd for {stop['name']}")
-        copy = self.scratch / "sites" / str(len(self.sites))
-        shutil.copytree(site, copy, ignore=shutil.ignore_patterns("_site"))
-        try:
-            done = subprocess.run([*SMALLDOCS, "render", str(copy)], capture_output=True, text=True, check=False, timeout=600)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            self.problem(str(site), f"smalldocs could not run: {error}")
+        project, prefix = published_place(site)
+        if project not in self.trees:
+            self.trees[project] = None
+            copy = self.scratch / "sites" / str(len(self.trees))
+            shutil.copytree(project, copy, ignore=shutil.ignore_patterns("_site"))
+            try:
+                done = subprocess.run([*SMALLDOCS, "render", str(copy)], capture_output=True, text=True, check=False, timeout=600)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                self.problem(str(project), f"smalldocs could not run: {error}")
+                return
+            said = (done.stdout + done.stderr).strip()
+            if done.returncode:
+                self.problem(str(project), f"smalldocs failed: {said[-500:]}")
+                return
+            self.trees[project] = (copy / "_site", [line.strip() for line in said.splitlines() if re.match(r"^\s*(warning|error)\b", line, re.IGNORECASE)])
+        if self.trees[project] is None:
             return
-        said = (done.stdout + done.stderr).strip()
-        if done.returncode:
-            self.problem(str(site), f"smalldocs failed: {said[-500:]}")
-            return
-        root, prefix = published_place(site)
-        tree = self.trees.setdefault(root, self.scratch / "published" / str(len(self.trees)))
-        shutil.copytree(copy / "_site", tree / prefix, dirs_exist_ok=True)
-        self.sites[site] = (tree, prefix, [line.strip() for line in said.splitlines() if re.match(r"^\s*(warning|error)\b", line, re.IGNORECASE)])
+        tree, warnings = self.trees[project]
+        others = other_walks(project)
+        mine = [line for line in warnings if owner(warned_page(line), others) == prefix]
+        self.sites[site] = (tree, prefix, mine)
 
     def finish(self) -> None:
         """Check the websites put together: each page that _smalldocs.yml lists is built, and each link of a built page or a page to read resolves."""
@@ -604,27 +609,22 @@ class Checker:
                 continue
             tree, prefix, warnings = built
             for line in warnings:
-                broken = re.match(r"^warning:\s*(.+?):\s*broken link\s+(\S+)", line)
-                if broken:
-                    page = f"{prefix}{broken.group(1)}".removesuffix(".qmd") + ".html"
-                    if self.resolves(tree, page, broken.group(2), prefix) is None:
-                        continue   # it resolves where the Pages workflow puts the sites together
                 self.problem(str(site), f"smalldocs: {line}")
-            config = (site / "_smalldocs.yml").read_text(encoding="utf-8") if (site / "_smalldocs.yml").is_file() else ""
+            project, _ = published_place(site)
+            others = other_walks(project)
+            config = (project / "_smalldocs.yml").read_text(encoding="utf-8") if (project / "_smalldocs.yml").is_file() else ""
             listed = set()
             render_list = re.search(r"^\s*render:\s*\[(.*?)\]", config, re.MULTILINE)
             for pattern in json.loads(f"[{render_list.group(1)}]") if render_list else []:
-                listed |= {path.relative_to(site).as_posix() for path in site.glob(pattern)}
+                listed |= {path.relative_to(project).as_posix() for path in project.glob(pattern)}
             listed |= set(re.findall(r"^\s*(?:-\s+|href:\s+)([^\s#:]+\.qmd)", config, re.MULTILINE))
-            for page in sorted(listed):
-                if not (tree / prefix / (page.removesuffix(".qmd") + ".html")).is_file():
-                    self.problem(str(site / "_smalldocs.yml"), f"lists {page}, and smalldocs did not build it")
+            for page in sorted(p for p in listed if owner(p, others) == prefix):
+                if not (tree / (page.removesuffix(".qmd") + ".html")).is_file():
+                    self.problem(str(project / "_smalldocs.yml"), f"lists {page}, and smalldocs did not build it")
             for path in sorted((tree / prefix).rglob("*.html")):
                 name = path.relative_to(tree).as_posix()
-                if prefix and not name.startswith(prefix):
-                    continue
-                if not prefix and any(name.startswith(other) for (t, other, _) in filter(None, self.sites.values()) if t == tree and other):
-                    continue   # the page of another walk's site, checked with that site
+                if owner(name, others) != prefix:
+                    continue   # the page of another walk, checked with that walk
                 for href in self.html(path).hrefs:
                     wrong = self.resolves(tree, name, href, prefix)
                     if wrong:
@@ -651,8 +651,8 @@ class Checker:
         if re.match(r"^[a-z][a-z0-9+.-]*:", href, re.IGNORECASE) or href.startswith("//"):
             return None
         target, _, fragment = href.partition("#")
-        if target.startswith("/"):   # from the top of the page's own site
-            path = normal(prefix + target.removesuffix(".qmd") + (".html" if target.endswith(".qmd") else ""))
+        if target.startswith("/"):   # from the top of the website
+            path = normal(target.removesuffix(".qmd") + (".html" if target.endswith(".qmd") else ""))
         else:
             path = normal((Path(page).parent / target).as_posix()) if target else page
         if target.endswith("/") or (tree / path).is_dir():
@@ -766,12 +766,36 @@ def write_cache(
 
 
 def published_place(
-    site: Path,  # The folder of a walk's website: site/, or sites/ID/
-) -> tuple[Path, str]:  # The folder of the pages, and where the Pages workflow puts the built site under the first's: "" or "ID/"
-    "Say where a walk's website goes when the Pages workflow publishes it."
-    if site.parent.name == "sites":
-        return site.parent.parent, f"{site.name}/"
-    return site.parent, ""
+    site: Path,  # The folder of a walk's pages on the website: site/, or site/ID/
+) -> tuple[Path, str]:  # The website's folder, site/, which holds _smalldocs.yml; and the walk's folder in it: "" or "ID/"
+    "Say which website a walk's pages are in, and where in it."
+    if not (site / "_smalldocs.yml").is_file() and (site.parent / "_smalldocs.yml").is_file():
+        return site.parent, f"{site.name}/"
+    return site, ""
+
+
+def other_walks(
+    project: Path,  # The website's folder, site/
+) -> list[str]:  # The folder of each other walk in it, as ID/
+    "Find the folders of the other walks in a website: each folder of site/ with an index.qmd that render.py made."
+    return sorted(f"{d.name}/" for d in project.iterdir() if d.is_dir() and (d / "index.qmd").is_file()
+                  and render.MADE in (d / "index.qmd").read_text(encoding="utf-8", errors="replace"))
+
+
+def owner(
+    page: str | None,  # A page of the website, by its path from the top, or None for a warning of no page
+    others: list[str],  # The folders of the other walks, as ID/
+) -> str:  # The folder of the walk that has the page: "" for the first walk, or ID/
+    "Say which walk a page of the website belongs to."
+    return next((other for other in others if page and page.startswith(other)), "")
+
+
+def warned_page(
+    line: str,  # A line that smalldocs warned
+) -> str | None:  # The page that it names, by its path in the website, or None
+    "Find the page that a warning of smalldocs is about."
+    found = re.match(r"^warning:\s*(.+?\.qmd):", line)
+    return found.group(1) if found else None
 
 
 def normal(
@@ -795,7 +819,7 @@ def main() -> int:  # The exit code: 1 if a page has a problem
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("pages", type=Path, nargs="+", help="read.md pages, and pages of a website in read/")
     parser.add_argument("--repo", type=Path, help="the project: for the facts, and the commits that links name")
-    parser.add_argument("--toc", type=Path, help="the class's toc.toml (default: toc.toml above walks/, site/ and sites/)")
+    parser.add_argument("--toc", type=Path, help="the class's toc.toml (default: toc.toml above walks/ and site/)")
     parser.add_argument("--facts", type=Path, help="the facts of one walk, for every page, in place of timewalk-export")
     parser.add_argument("--project-url", help="the project on GitHub, https://github.com/OWNER/NAME (default: the upstream and project of the justfile beside toc.toml)")
     parser.add_argument("--github", action="store_true", help="ask GitHub for every link to github.com")
@@ -817,7 +841,9 @@ def main() -> int:  # The exit code: 1 if a page has a problem
         checker.finish()
         found = checker.problems[before:]
         built = sum(1 for site in checker.sites.values() if site)
-        print(f"{'FAIL' if found else 'ok  '} {built} websites, built and put together" + (f" ({len(found)} problems)" if found else ""))
+        websites = sum(1 for tree in checker.trees.values() if tree)
+        print(f"{'FAIL' if found else 'ok  '} the pages of {built} walks, in {websites} website{'s' * (websites != 1)} built" +
+              (f" ({len(found)} problems)" if found else ""))
         for problem in found:
             print(f"  {problem}")
     finally:
