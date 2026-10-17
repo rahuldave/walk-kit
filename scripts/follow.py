@@ -26,6 +26,16 @@ report goes to reports/follow/FOLDER-PAGE.md in --report-dir, written again at e
 
 The script prints one line for each `git check`, and last `follow: N checks, M failed`. The exit code is 1 if a check
 failed or the model found a problem.
+
+    python3 follow.py walks/ID/read.md --narrative --repo DIR --work DIR [--log FILE] [--check-output]
+
+With --narrative, PAGE is the read.md of a narrative, which has no Build it yourself page. The script clones the
+project that the page names ("This walk goes through"), and for each part checks out the code that the page says the
+part is at ("This part ends at the code at `REF`", or for the first part "This part is where the project starts, at
+`REF`"), keeping untracked files, as the teacher's replay does. Then it runs the part's commands in order; those before
+the first part run at the first part's code. A command that fails is logged, and is not a failure. A part without its
+code, or a checkout that fails, fails the run. With --check-output, the model compares the text with the log, as for a
+tutorial.
 """
 
 import argparse
@@ -392,6 +402,57 @@ def check_output(
     return len(findings)
 
 
+PROJECT = re.compile(r"This walk goes through \[[^\]]+\]\((https://github\.com/[^)\s]+)\)")  # the project of a page to read
+CODE_AT = re.compile(r"(?:This part ends at the code at|This part is where the project starts, at) `([^`]+)`")  # the code of a part
+
+
+def narrative_parts(
+    text: str,  # The read.md of a narrative
+) -> list[tuple[str, str | None, list[str]]]:  # Each part: its heading, the code it is at, and its commands; the intro's go with the first
+    "Split a narrative's page into its parts, each a heading of level 2, with the code that the page names for it and its commands."
+    lines = text.split("\n")
+    heads = [at for at, line in enumerate(lines) if re.match(r"^## \S", line)]
+    fences = [(start, body) for start, _, language, body in fences_of(text) if language in LANGUAGES]
+    parts = []
+    for number, start in enumerate(heads):
+        end = heads[number + 1] if number + 1 < len(heads) else len(lines)
+        found = next((m.group(1) for line in lines[start:end] for m in [CODE_AT.search(line)] if m), None)
+        lower = 0 if not number else start   # the commands before the first part run with it
+        commands = [command for at, body in fences if lower <= at < end for command in commands_of(body)]
+        parts.append((lines[start].lstrip("#").strip(), found, commands))
+    return parts
+
+
+def follow_narrative(
+    student: "Student",  # The student, with an empty scratch folder
+    text: str,  # The read.md of a narrative
+) -> int:  # The number of parts whose code could not be had
+    "Clone the project, and for each part check out its code and run its commands, as the teacher does at each stop."
+    project = PROJECT.search(text)
+    if not project:
+        raise SystemExit("follow: the page names no project: no line \"This walk goes through [...](https://github.com/...)\"")
+    url = project.group(1)
+    student.run(f"git clone {url}")
+    root = student.work / url.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
+    missing = 0
+    for heading, code, commands in narrative_parts(text):
+        student.heading, student.cwd = heading, root
+        student.log += [f"## {heading}", ""]
+        if not code:
+            missing += 1
+            print(f"FAIL {heading}: the page names no code for this part")
+            continue
+        status, output = student.run(f"git checkout --quiet --force --detach {shlex.quote(code)}")
+        if status:
+            missing += 1
+            print(f"FAIL {heading}: cannot check out {code}: {output.strip()[:300]}")
+            continue
+        for command in commands:
+            student.run(command)
+        print(f"ok   {heading}   (the code at {code}, {len(commands)} commands)")
+    return missing
+
+
 def main() -> int:  # The exit code: 1 if a check failed or the output check found a problem
     "Follow a Build it yourself page in a scratch clone."
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -402,6 +463,7 @@ def main() -> int:  # The exit code: 1 if a check failed or the output check fou
     parser.add_argument("--log", type=Path, help="write each command, its exit code and its output here, as Markdown")
     parser.add_argument("--check-output", action="store_true", help="ask a model whether the text matches the output, if claude is installed")
     parser.add_argument("--report-dir", type=Path, default=Path("."), help="the folder for reports/follow/ (default: this folder)")
+    parser.add_argument("--narrative", action="store_true", help="PAGE is a narrative's read.md: run each part's commands at its code")
     args = parser.parse_args()
     page, repo, work = args.page.resolve(), args.repo.expanduser().resolve(), args.work.expanduser().resolve()
     if not (repo / ".git").exists():
@@ -410,6 +472,8 @@ def main() -> int:  # The exit code: 1 if a check failed or the output check fou
         parser.error(f"--work {work} is not an empty folder")
     work.mkdir(parents=True, exist_ok=True)
     text = page.read_text(encoding="utf-8")
+    if args.narrative:
+        return narrative(args, page, repo, work, text)
     blocks = blocks_of(text)
     skip = False
     if not section(blocks, "Get the project"):
@@ -442,6 +506,36 @@ def main() -> int:  # The exit code: 1 if a check failed or the output check fou
         else:
             print("output check: skipped, because claude (Claude Code) is not installed")
     return 1 if student.failed or missed or findings else 0
+
+
+def narrative(
+    args: argparse.Namespace,  # The command line
+    page: Path,  # The read.md of a narrative
+    repo: Path,  # The local clone of the project
+    work: Path,  # The scratch folder, empty
+    text: str,  # The page
+) -> int:  # The exit code: 1 if a part's code could not be had, or the output check found a problem
+    "Follow a narrative's page: each part's commands at its code, then the output check."
+    student = Student(repo, work, args.github)
+    student.log += [f"# follow.py: {page.name}", "", f"The commands of the narrative {page}, each part at its code, run in {work}.", ""]
+    try:
+        missing = follow_narrative(student, text)
+    finally:
+        student.stop()
+    log = "\n".join(student.log)
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        args.log.write_text(log, encoding="utf-8")
+    parts = narrative_parts(text)
+    print(f"follow: a narrative, {len(parts)} parts, {sum(len(c) for _, _, c in parts)} commands, {missing} parts without their code")
+    findings = 0
+    if args.check_output:
+        if shutil.which("claude"):
+            report = args.report_dir.expanduser().resolve() / "reports" / "follow" / f"{report_name(page)}.md"
+            findings = check_output(page, log, student.cwd, report)
+        else:
+            print("output check: skipped, because claude (Claude Code) is not installed")
+    return 1 if missing or findings or not parts else 0
 
 
 if __name__ == "__main__":

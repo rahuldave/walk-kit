@@ -9,7 +9,7 @@ prints. Each check below finds one kind of mistake. Run them in the class folder
 |---|---|---|
 | `just check` | The notes and slides of every walk against the steps, then the pages that students read | No |
 | `just pages` | Makes the pages, with the same checks as `just walk-update`, and commits nothing | No |
-| `just follow` | Each Build it yourself page, followed in a scratch clone | Yes, with Claude Code |
+| `just follow` | Each Build it yourself page, and each narrative's commands, followed in a scratch clone | Yes, with Claude Code |
 | `just style` | The prose of the class against the writing guide | Yes, with Claude Code |
 
 `just follow` and `just style` call Claude Code through `claude -p`, with the model Opus. Each call counts against
@@ -41,6 +41,10 @@ on purpose. But each `git check` after a move must print nothing. The log of eac
 With Claude Code, a model then reads the page and its log once. It reports each output, number or claim of the text
 that the log does not show. Its report goes to `reports/follow/ID-build.md`, and each run writes it again. A finding
 fails the recipe. Fix the notes, and run it again.
+
+A narrative has no Build it yourself page. For each part of a narrative, `just follow` checks out the code of the part
+in a scratch clone, and runs the part's commands. The model then checks the text against what they printed. So a
+command whose output changed, such as a new version of a tool, is found before the class, and not in it.
 
 ## just style
 

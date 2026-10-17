@@ -63,6 +63,26 @@ class Follow(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def test_a_narrative(self) -> None:
+        "Each part's commands run at the code that the page names for it, untracked files stay, and a part with no such code fails."
+        git(self.repo, "tag", "step-01", self.two)
+        page = ("# A walk\n\nIntro.\n\n" + fence("echo made > out.txt") +
+                f"\n## 0 Start\n\nThis walk goes through [o/proj](https://github.com/o/proj) on GitHub. This part is where the project starts, "
+                f"at `{self.start[:12]}`. [The code of this part](https://github.com/o/proj/tree/{self.start})\n\n" + fence("cat a.txt") +
+                "\n## 1 Two\n\nThis walk goes through [o/proj](https://github.com/o/proj) on GitHub.\n\n" + fence("cat a.txt", "cat out.txt") +
+                "\nThis part ends at the code at `step-01`. [The code after this part](https://github.com/o/proj/tree/step-01)\n")
+        log = self.root / "log.md"
+        code, said = self.follow(page, "--narrative", "--log", str(log))
+        self.assertEqual(code, 0, said)
+        self.assertIn("follow: a narrative, 2 parts, 4 commands, 0 parts without their code", said)
+        text = log.read_text()
+        self.assertIn("$ cat a.txt\none\n```", text, "the first part at the first commit")
+        self.assertIn("$ cat a.txt\none\ntwo\n```", text, "the second part at its tag")
+        self.assertIn("$ cat out.txt\nmade\n```", text, "an untracked file of an earlier part stays")
+        code, said = self.follow(page.replace("`step-01`", "`step-09`"), "--narrative")
+        self.assertEqual(code, 1, said)
+        self.assertIn("FAIL 1 Two: cannot check out step-09", said)
+
     def setup_block(self) -> str:
         "Get the project, at the first commit."
         return "## Get the project\n\n" + fence("git clone https://github.com/o/proj", "cd proj", f"git switch -qc mine {self.start}", ALIAS)

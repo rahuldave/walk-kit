@@ -918,6 +918,13 @@ only after that check fails. follow counts the `git check` lines of the page, an
 checks, or if the page has none. The log is `build/follow/ID.md`. A class without `toc.toml` has no pages, and
 `just follow` says that it has nothing to follow.
 
+A narrative has no Build it yourself page, so `just follow` follows its `walks/ID/read.md` with `follow.py
+--narrative`. For each part, follow checks out the code that the page names at the part's end.
+The first part has its code at its top. Then follow runs the part's commands in order. Untracked files stay from part to part, as in the teacher's replay.
+
+A command that fails is logged, not counted. A part whose code cannot be checked out fails. The model then compares
+the text with the log, as for a tutorial, so a command whose output changed is found before the class.
+
 With Claude Code installed, follow also makes one call to a model with the page and the log, with the prompt in
 `review/output.md`. The model reports each output, number or claim of the text that the log does not show. The
 report is `reports/follow/ID-build.md`, and each run writes it again. A finding fails the recipe. Fix the notes, and

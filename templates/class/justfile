@@ -127,10 +127,17 @@ follow *args:
     trap 'rm -rf "$scratch"' EXIT
     shopt -s nullglob
     pages=("$out"/walks/*/build.md)
-    if [ ${#pages[@]} -eq 0 ]; then echo "follow: no walk is a tutorial, so there is no Build it yourself page"; exit 0; fi
     mkdir -p build/follow
     failed=0
-    for page in "${pages[@]}"; do
+    # A narrative has no Build it yourself page: each part's commands run at its code, and the model checks the text
+    for page in "$out"/walks/*/read.md; do
+        [ -f "$(dirname "$page")/build.md" ] && continue
+        id=$(basename "$(dirname "$page")")
+        echo "follow: narrative $id"
+        python3 "$skill/scripts/follow.py" "$page" --narrative --repo {{ quote(repo) }} --work "$scratch/narrative-$id" \
+            --log "build/follow/$id.md" ${check[@]+"${check[@]}"} "$@" || failed=1
+    done
+    for page in ${pages[@]+"${pages[@]}"}; do
         id=$(basename "$(dirname "$page")")
         echo "follow: walk $id"
         python3 "$skill/scripts/follow.py" "$page" --repo {{ quote(repo) }} --work "$scratch/$id" --log "build/follow/$id.md" \

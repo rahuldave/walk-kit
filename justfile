@@ -39,6 +39,13 @@ test:
         echo "test: walk $id"
         python3 scripts/follow.py "$page" --repo "$class/repo" --work "$scratch/work/$id" || failed=1
     done
+    # Each narrative: its parts' commands, each at its code
+    for page in "$scratch"/pages/walks/*/read.md; do
+        [ -f "$(dirname "$page")/build.md" ] && continue
+        id=$(basename "$(dirname "$page")")
+        echo "test: narrative $id"
+        python3 scripts/follow.py "$page" --narrative --repo "$class/repo" --work "$scratch/work/narrative-$id" > /dev/null || { echo "test: FAIL narrative $id"; failed=1; }
+    done
     # Each part page of each walk's website, as a student who starts at that part
     for page in "$scratch"/pages/site/build/*.qmd "$scratch"/pages/site/*/build/*.qmd; do
         [ -f "$page" ] || continue
