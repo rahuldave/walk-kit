@@ -788,6 +788,10 @@ class WalkSites(unittest.TestCase):
         self.assertIn('  sidebar:\n    - title: "The first"\n      style: docked\n      contents:\n        - index.qmd\n', config)
         self.assertIn('    - title: "Second"\n      style: docked\n      contents:\n        - second/index.qmd\n', config)
         self.assertIn('            - text: "1 One"\n              href: second/read/step-01.qmd\n', config)
+        self.assertIn('  navbar:\n    left:\n      - text: "Walks"\n        menu:\n          - text: "The first"\n            href: index.qmd\n'
+                      '          - text: "Second"\n            href: second/index.qmd\n  sidebar:', config, "a menu of the walks in the navbar")
+        alone = self.pages({"first": self.facts("first", "The first", "One.")})["site/_smalldocs.yml"]
+        self.assertNotIn("navbar", alone, "one walk: no menu, and no navbar")
 
     def test_an_id_that_clashes(self) -> None:
         "A walk after the first may not have an id that the first walk uses at the top of site/, in any case."

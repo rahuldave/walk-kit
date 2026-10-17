@@ -827,7 +827,7 @@ give the class a `toc.toml` with one walk. See [The table of contents](#the-tabl
 | `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
 | `site/` | The website, one smalldocs project with one `_smalldocs.yml` and a sidebar for each walk. The first walk's pages are at the top: a front page that explains the two ways and links to each other walk, and a page for each part in `read/` and in `build/` |
-| `site/ID/` | The pages of each other walk, in the same shape. Its front page links back to the first walk |
+| `site/ID/` | The pages of each other walk, in the same shape. Its front page links back to the first walk. With two walks or more, a menu **Walks** in the navbar lists every walk, so each page reaches each walk |
 | `.github/workflows/pages.yml` | The workflow that builds the website and publishes it on GitHub Pages |
 
 Do not edit a page by hand. Its first line says that `render.py` made it, and the next `just walk-update` makes it

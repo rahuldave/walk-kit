@@ -86,7 +86,7 @@ SMALLDOCS_SKIPS = {"node_modules", "venv", "env", "renv", "site-packages", "__py
 SITE_SETTINGS = "site.toml"  # beside toc.toml: the class's smalldocs theme, owner/repo@ref, and settings of its own for the website
 THEME_LIST = "site/_extensions/.walk-kit"  # the theme's files that render.py wrote, one path a line, for a later run to replace or remove
 # The settings that render.py writes in _smalldocs.yml: the class's own settings may add to them, but not change them
-OWN_SETTINGS = ("project", "website.title", "website.page-navigation", "website.search", "website.sidebar", "theme", "css", "toc",
+OWN_SETTINGS = ("project", "website.title", "website.page-navigation", "website.search", "website.sidebar", "website.navbar.left", "theme", "css", "toc",
                 "toc-depth", "code-copy", "from", "metadata-files", "format")
 # The names of smalldocs's own themes, which a theme of the class may not take
 BOOTSWATCH = {"cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal", "litera", "lumen", "lux", "materia", "minty", "morph", "pulse",
@@ -1061,9 +1061,14 @@ def site_files(
         render += [f"{ident}/index.qmd", *(f"{ident}/{WAYS[m][1]}/*.qmd" for m in ways(other))]
         sidebars += ["  - title: " + json.dumps(other["walk"]["title"]), "    style: docked", "    contents:", *more]
     pages = ", ".join(json.dumps(p) for p in render)
+    menu = []   # with several walks, a menu of them in the navbar, so that each page reaches every walk
+    if others:
+        menu = ["  navbar:", "    left:", '      - text: "Walks"', "        menu:", f"          - text: {json.dumps(title)}", "            href: index.qmd"]
+        for other in others:
+            menu += [f"          - text: {json.dumps(other['walk']['title'])}", f"            href: {other['walk']['id']}/index.qmd"]
     files["_smalldocs.yml"] = "\n".join([
         f"# {MADE}", "project:", "  type: website", "  output-dir: _site", f"  render: [{pages}]   # only these pages", "",
-        "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", "  sidebar:",
+        "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", *menu, "  sidebar:",
         *("  " + line for line in "\n".join(sidebars).split("\n")), "", *(['metadata-files: ["_settings.yml"]   # the class\'s own settings'] if settings else []),
         f"theme: {json.dumps(theme) if theme else 'cosmo'}", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
         "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens", ""])
