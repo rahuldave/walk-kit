@@ -98,7 +98,7 @@ bla-class/
 | Key | Holds |
 |---|---|
 | `id` | The name of the walk: letters, digits, `-` and `_` |
-| `title` | What the menu shows |
+| `title` | What timewalk's menu, the website's header and menu **Walks**, and each tab show. Keep it short, a few words that name the walk, such as `The tests`, and never `The tests, one move at a time`: that a tutorial goes move by move is said on every page already |
 | `description` | A sentence or two. The page shows it at the first step of the walk |
 | `kind` | `"narrative"`, the default, or `"tutorial"` |
 | `notes`, `slides` | The notes file and the manifest of the walk |

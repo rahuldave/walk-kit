@@ -613,12 +613,25 @@ def tree_ref(
 def parts_lines(
     facts: dict,  # The facts of the walk
 ) -> list[str]:  # What a page of the website is, for its front page
-    """Say what a part is, and where its code is: a tag of the project, or a commit partway between two."""
+    """Say how the walk is cut: a part is a stage of the project, which ends with the project working; a tutorial cuts a
+    part into moves, between which the code can be broken on purpose; and working is not right, so a part can end with a
+    mistake of the problem itself, which a later part finds. Then where the code of a part is: a tag, or a commit."""
     tag = next((found for found in (step_tag(facts, stop["commit"]) for stop in facts["stops"]) if found), None)
     named = f", such as `{tag}`" if tag else ""
-    return [f"Each page is one part. A part is one or more changes to the project, each a section of its page. The code where "
-            f"a part starts and where it ends has a tag on GitHub{named}, or is a commit between two tags. The top of each page "
-            "says where its part starts, and the bottom says where it ends, each with a link to that code."]
+    lines = ["## How the walk is cut", "",
+             "Each page is one part, a stage of the project. At the end of every part, the project works. It runs, and its "
+             "checks pass."]
+    if facts["walk"]["kind"] == "tutorial":
+        lines[-1] += (" A tutorial cuts each part into moves, one small change each, and a move is a section of its page. "
+                      "Between two moves, the code can be broken on purpose. For example, a move adds a test that fails, and "
+                      "the next move makes it pass. A part never ends broken.")
+    lines += ["", "Working is not the same as right. A part can end with code that runs and passes its checks. That code can "
+              "still be wrong for the problem, such as a mask that leaves out the wrong rows. Such a mistake is part of the story, "
+              "and a later part finds it and fixes it.", "",
+              f"The code where a part starts and where it ends has a tag on GitHub{named}, or is a commit between two tags. "
+              "The top of each page says where its part starts, and the bottom says where it ends, each with a link to that "
+              "code."]
+    return lines
 
 
 def part_top(

@@ -818,6 +818,18 @@ class WalkSites(unittest.TestCase):
         self.assertIn("- `just present second`: *Second* (a tutorial)", section)
         self.assertNotIn("Follow the walks in timewalk", pages["site/second/index.qmd"], "once, on the website's front page")
 
+    def test_how_the_walk_is_cut(self) -> None:
+        "Each walk's front page says that a part ends working, and that working is not right; a tutorial's, that a move can be broken."
+        walks = {"first": self.facts("first", "The first", ""), "second": self.facts("second", "Second", "")}
+        walks["second"]["walk"]["kind"] = "tutorial"
+        pages = self.pages(walks)
+        for name, tutorial in (("site/index.qmd", False), ("site/second/index.qmd", True)):
+            front = pages[name]
+            self.assertIn("## How the walk is cut", front)
+            self.assertIn("At the end of every part, the project works.", front)
+            self.assertIn("Working is not the same as right.", front)
+            self.assertEqual("Between two moves, the code can be broken on purpose." in front, tutorial, name)
+
     def test_an_id_that_clashes(self) -> None:
         "A walk after the first may not have an id that the first walk uses at the top of site/, in any case."
         for ident in ("read", "build", "index", "site_libs", "search.json", "Read"):

@@ -182,6 +182,12 @@ cues included. To show a cue to students, start it with another word, for exampl
 - **Explain a move once, in the intro of every tutorial.** Write it yourself, in the words of the class. A move is
   one small change, made by one patch or one command. The learner makes each move, and the page checks the
   learner's files against it. After the intro, the text can use the word "move" anywhere.
+- **Give each walk a short title.** The menu of timewalk, the header and the menu **Walks** of the website, and each
+  tab show it. A few words that name the walk, such as "The tests" or "A release", are enough. Never add "one move at a
+  time" or "step by step", because every page says how a walk goes already.
+- **End each step with the project working.** The website's front page tells students that every part ends with the
+  project running and its checks passing. A move may leave a test failing on purpose, for the next move to fix. A step
+  may end with a mistake of the problem itself, such as a wrong mask, when a later step finds it.
 - **Name a table of a `pyproject.toml` by its name, never by its place.** Build it yourself copies a new table into the
   student's file with tomlkit. tomlkit puts it beside the tables of its kind, so the student's tables can come in
   another order. Write "the table `[tool.ruff]` sets `line-length`", and never "at the end" or "after `[dependency-groups]`".
