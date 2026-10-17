@@ -292,14 +292,34 @@ class SetByData(Case):
         self.assertIn("git apply", "\n".join(render.stop_page(facts, stop, 1, "do", False)))
 
     def test_command(self) -> None:
-        "The command names the file, writes each value as Python, and its here-document ends where follow ends it."
-        lines = render.set_command("packages/a b/pyproject.toml", [(("tool", "x"), {"when": "PY", "on": True, "n": 1.5})], [("tool", "y")])
+        "The command names the file, copies each table by its keys from the project's file at the commit, and its here-document ends where follow ends it."
+        lines = render.set_command("packages/a b/pyproject.toml", "f" * 40, [(("tool", "x"), {"when": "PY", "on": True, "n": 1.5})], [("tool", "y")])
         block = "\n".join(lines[1:-1])
         self.assertIn("pathlib.Path('packages/a b/pyproject.toml')", block)
-        self.assertIn("'on': True", block)
+        self.assertIn("['git', 'show', 'ffffffffffff:packages/a b/pyproject.toml']", block)
+        self.assertIn("    ('tool', 'x'),", block)
+        self.assertNotIn("'on': True", block, "the values come from the project's file, with their comments")
         self.assertEqual(follow.commands_of(block.split("\n")), [block])
-        with self.assertRaises(render.PagesError):
-            render.set_command("pyproject.toml", [(("tool", "x"), float("inf"))], [])
+
+    def test_comments_come_along(self) -> None:
+        "A patch that adds a commented table, and a commented key to a table there: the student's file gets every comment."
+        table = ('\n[tool.ruff]\n# The one setting that both share.\nline-length = 100\n\n[tool.ruff.format]\n'
+                 '# The defaults, written out.\nquote-style = "double"  # "text", not \'text\'\n')
+        start = commit(self.repo, {"pyproject.toml": START + DEV + '\n[tool.x]\na = 1\n', "uv.lock": lock("0.17.0")}, "start")
+        sha = commit(self.repo, {"pyproject.toml": START + DEV + '\n[tool.x]\na = 1\n# Why b.\nb = 2  # two\n' + table}, "ruff")
+        facts, stop = tutorial(LOOSE, start, sha, [{"kind": "patch", "mode": "shared", "path": "pyproject.toml"}],
+                               [file_of("pyproject.toml", "patch", hunks(START + DEV + '\n[tool.x]\na = 1\n', START + DEV + '\n[tool.x]\na = 1\n# Why b.\nb = 2  # two\n' + table))])
+        facts["toml_edits"] = render.toml_edits(self.repo, facts)
+        page = "\n".join(render.stop_page(facts, stop, 1, "do", False))
+        work = self.learner(facts, start)
+        command = next(c for block in follow.blocks_of(page) for c in block.commands if c.startswith("uv run"))
+        sh(work, command)
+        text = (work / "pyproject.toml").read_text()
+        for comment in ("# The one setting that both share.", "# The defaults, written out.", '# "text", not \'text\'', "# Why b.", "# two"):
+            self.assertIn(comment, text)
+        self.assertIn("\n\n[", text[text.index("[tool.ruff.format]"):] + "\n\n[", "a blank line before the next table")
+        done = sh(work, f"git check {sha}", check=False)
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
 
 
 
@@ -370,7 +390,7 @@ class ReviewCases(Case):
         work = self.folder / "aot"
         work.mkdir()
         (work / "pyproject.toml").write_text('[project]\nname = "demo"\n\n[[tool.x]]\na = 1\n')
-        block = "\n".join(render.set_command("pyproject.toml", [], [("tool", "x", "y")])[1:-1])
+        block = "\n".join(render.set_command("pyproject.toml", "f" * 40, [], [("tool", "x", "y")])[1:-1])
         sh(work, block)
         self.assertIn("[[tool.x]]", (work / "pyproject.toml").read_text())
 

@@ -99,9 +99,12 @@ and the page says to delete it if `git check` lists it.
 In the notes, a line `patch$ PATH` says that a move changes `PATH` by a patch. In Build it yourself, the line
 becomes a command that applies the patch from GitHub, with `curl` and `git apply`.
 
-A `pyproject.toml` that `loose` names is the exception. Its line becomes a command that sets each value that the move sets, such as the table
-`[tool.ruff]`, with tomlkit, a TOML library. The command keeps the rest of the student's file, and the versions that
-the student's `uv add` wrote. A binary file
+A `pyproject.toml` that `loose` names is the exception. Its line becomes a command that copies each value that the move
+sets, such as the table `[tool.ruff]`, from the project's file. The command uses tomlkit, a TOML library, and keeps the
+comments.
+
+The command keeps the rest of the student's file, and the versions that the student's `uv add` wrote. A new table can come
+in another place in the student's file than in the project's, which TOML reads the same way. A binary file
 has no patch on GitHub, so its line becomes a `git restore` of the file from the commit. A line that names a renamed file
 by its old path gets the command for the new path, which renames the file.
 

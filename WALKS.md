@@ -718,10 +718,15 @@ project's versions in its context, so it fails beside the student's. So the page
   names, Build it yourself gives one command in place of the patch. The renderer compares the file before the move
   and after it as data. It finds each value that the move sets or removes, such as the table `[tool.ruff]`. The
   command runs a Python program through uv, with tomlkit, a TOML library that keeps comments and order. The
-  program reads the student's file, sets each of these values, removes the others, and writes the file back. The
-  values are in the command, so it fetches no file of the project. uv fetches tomlkit once, and keeps it in its cache.
-  A table goes into the table that is there, key by key, so the
-  versions that the student's `uv add` wrote stay.
+  program reads the student's file, and reads the project's file after the move from the student's clone, with
+  `git show`. It copies each value and table that the move sets from the project's file, with its comments. A key that
+  is new in the student's file also gets the comment lines above it. It removes the others, and writes the file back.
+  The command holds the keys, and not the values. uv fetches tomlkit once, and keeps it in its cache. The versions that
+  the student's `uv add` wrote stay, because a `patch$` line may not change dependencies.
+- **A new table can sit somewhere else in the student's file.** tomlkit puts a new table, such as `[tool.ruff]`, beside
+  the `[tool.*]` tables that the student's file has. So the student's tables can come in another order than the
+  project's. TOML, and every tool, reads the file the same way. In the text of a move, name a table and its values,
+  never where the table sits in the file, such as "at the end" or "after `[dependency-groups]`".
 - After a `do$` line that writes the `pyproject.toml`, the command sets only what the `do$` line did not write. The
   renderer takes the facts' patch back from the commit's file to find what the `do$` line wrote.
 - The renderer reads the files from the project, so the pages of such a walk need `--repo`.

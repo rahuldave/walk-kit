@@ -182,6 +182,9 @@ cues included. To show a cue to students, start it with another word, for exampl
 - **Explain a move once, in the intro of every tutorial.** Write it yourself, in the words of the class. A move is
   one small change, made by one patch or one command. The learner makes each move, and the page checks the
   learner's files against it. After the intro, the text can use the word "move" anywhere.
+- **Name a table of a `pyproject.toml` by its name, never by its place.** Build it yourself copies a new table into the
+  student's file with tomlkit. tomlkit puts it beside the tables of its kind, so the student's tables can come in
+  another order. Write "the table `[tool.ruff]` sets `line-length`", and never "at the end" or "after `[dependency-groups]`".
 - **Write the notes for a reader who has never heard of timewalk.** Keep the words "step", "commit" and "Start"
   out of the text. Open a step with what we build and why. Open a move with the problem and the change that
   solves it. Then give the change piece by piece. In do mode, say what to read in each patch, and where; copy no

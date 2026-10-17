@@ -349,8 +349,9 @@ class Page:
                     commands = [p["text"] for p in parts if p["kind"] == "command" and p["makes"]]
                     after = f"After {span(commands[by])}, set the other" if isinstance(by, int) and by < len(commands) else "Set the"
                     self.add("", f"{after} values that this change sets in {link}. Run this command from the top of the project. It "
-                             "reads your file with tomlkit, a library for TOML files. It sets each of these values as the project "
-                             "has it, and keeps the rest of your file:", "", *set_command(path, *edit), "")
+                             "reads your file with tomlkit, a library for TOML files. It copies each of these tables and values from "
+                             "the project's file after this change, with their comments, and keeps the rest of your file:", "",
+                             *set_command(path, sha, *edit), "")
                 elif isinstance(by, int) and found["patch"] and not found["binary"]:   # a do$ line wrote the file first: apply what changes after it
                     commands = [p["text"] for p in parts if p["kind"] == "command" and p["makes"]]
                     after = f"After {span(commands[by])}, apply" if by < len(commands) else "Apply"
@@ -887,37 +888,49 @@ def dependency_gaps(
 
 def set_command(
     path: str,  # A pyproject.toml, from the top of the project
-    sets: list[tuple[tuple, object]],  # Each value to set, by its keys
+    sha: str,  # The commit after the change, whose file the command copies from
+    sets: list[tuple[tuple, object]],  # Each value that the change sets, by its keys
     removed: list[tuple],  # The keys of each value to remove
 ) -> list[str]:  # A fenced block of shell: uv runs a Python program with tomlkit, in a quoted here-document
-    """Make the command that sets values of the student's pyproject.toml as data. tomlkit keeps the rest of the file, its
-    comments and its order. A table goes into the table that is there, key by key, so a value that the student's uv wrote
-    stays."""
-    def literal(value: object) -> bool:   # what repr writes as Python that gives the same value back
-        if isinstance(value, dict):
-            return all(isinstance(k, str) and literal(v) for k, v in value.items())
-        if isinstance(value, list):
-            return all(map(literal, value))
-        if isinstance(value, float):
-            return value == value and abs(value) != float("inf")
-        return isinstance(value, (str, int, bool)) or type(value).__module__ == "datetime"
-
-    if not all(literal(value) for _, value in sets):
-        raise PagesError(f"{path}: a value that the change sets cannot be written as Python, such as inf or nan")
-    dated = any("datetime." in repr(value) for _, value in sets)
-    program = [f"import {'datetime, ' if dated else ''}pathlib, tomlkit", f"path = pathlib.Path({path!r})",
+    """Make the command that sets values of the student's pyproject.toml as data. It reads the project's file after the
+    change from the student's own clone, with git show, and copies each table and value that the change sets as a tomlkit
+    item, which keeps its comments, with the comment lines above a key that the student's file does not have. tomlkit keeps
+    the rest of the student's file, its comments and its order; a new table goes beside the tables that the file has."""
+    program = ["import copy, pathlib, subprocess, tomlkit", "from tomlkit.items import Comment, Table, Whitespace",
+               f"path = pathlib.Path({path!r})",
                "doc = tomlkit.parse(path.read_text(encoding='utf-8')) if path.exists() else tomlkit.document()"]
     if sets:
-        program += ["# Each value that the change sets, by its keys", "SET = ["]
-        program += ["    " + pprint.pformat((keys, value), width=110, sort_dicts=False).replace("\n", "\n    ") + "," for keys, value in sets]
+        program += ["# The project's file after this change, from your clone",
+                    f"project = tomlkit.parse(subprocess.run(['git', 'show', {(sha[:12] + ':' + path)!r}], capture_output=True, text=True,",
+                    "                                        check=True).stdout)",
+                    "# Each table and value that the change sets, by its keys: each comes from the project's file with its comments",
+                    "COPY = ["]
+        program += ["    " + repr(tuple(keys)) + "," for keys, _ in sets]
         program += ["]", "",
-                    "def put(table, keys, value):   # make each table on the way; a table goes into the one there, key by key",
-                    "    for key in keys[:-1]:", "        if key not in table:", "            table[key] = tomlkit.table(True)",
-                    "        table = table[key]",
-                    "    if isinstance(value, dict) and isinstance(table.get(keys[-1]), dict):",
-                    "        for key, item in value.items():", "            put(table[keys[-1]], [key], item)",
-                    "    else:", "        table[keys[-1]] = value", "",
-                    "for keys, value in SET:", "    put(doc, keys, value)"]
+                    "def body(table):   # the items of a table in their order, with its comment lines",
+                    "    inner = table if isinstance(table, tomlkit.TOMLDocument) else getattr(table, 'value', None)",
+                    "    return getattr(inner, 'body', [])", "",
+                    "def above(table, key):   # the comment lines just above a key",
+                    "    found = []",
+                    "    for name, item in body(table):",
+                    "        if name is not None and name.key == key:",
+                    "            return found",
+                    "        found = found + [item] if isinstance(item, Comment) else found if isinstance(item, Whitespace) else []",
+                    "    return []", "",
+                    "for keys in COPY:",
+                    "    source, target = project, doc",
+                    "    for key in keys[:-1]:   # make each table on the way",
+                    "        source = source[key]",
+                    "        if key not in target:",
+                    "            target[key] = tomlkit.table(True)",
+                    "        target = target[key]",
+                    "    item = copy.deepcopy(source[keys[-1]])",
+                    "    if isinstance(item, Table) and not item.as_string().endswith('\\n\\n'):",
+                    "        item.add(tomlkit.nl())   # a blank line before the table after it",
+                    "    if keys[-1] not in target:",
+                    "        for comment in above(source, keys[-1]):",
+                    "            target.add(copy.deepcopy(comment))",
+                    "    target[keys[-1]] = item"]
     if removed:
         program += ["# Each value that the change removes, by its keys", "for keys in " + pprint.pformat(removed, width=100) + ":",
                     "    table = doc", "    for key in keys[:-1]:",
