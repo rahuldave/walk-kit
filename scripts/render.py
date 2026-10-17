@@ -334,8 +334,14 @@ class Page:
                 given.add(path)
                 link = f"[{span(path)}](#{anchor(move, path)})" if path in known else span(path)
                 by = found["by"] if found else "patch"
-                if self.mode == "watch":
-                    self.add("", f"A patch to {link}" + (f", which renames {span(old)}." if old else "."), "")
+                if self.mode == "watch":   # what happened to the file, as a button to its diff in What changed
+                    words = patch_words(found["status"] if found else "modified", path, old)
+                    if found and found["status"] == "deleted":
+                        self.add("", f"{words}.", "")
+                    elif path in known:
+                        self.add("", self.button(words, f"#{anchor(move, path)}", "secondary"), "")
+                    else:
+                        self.add("", f"{words}.", "")
                 elif path in took_paths:   # the student took the file as the move's commit has it, with this change in it
                     self.add("", f"The command above took {link} from the project with this change in it already, so there is "
                              "nothing to apply.", "")
@@ -524,6 +530,21 @@ def counts(
     if found["status"] == "renamed":
         return f"Renamed from `{found['old_path']}`" + (f", {change}" if found["added"] or found["removed"] else "")
     return change[0].upper() + change[1:]
+
+
+def patch_words(
+    status: str,  # What the change does to the file: added, modified, renamed or deleted
+    path: str,  # The file, by its new path
+    old: str | None,  # The old path of a renamed file
+) -> str:  # What Read the tutorial says for a patch$ line, which names what happened to the file
+    """Say what a move does to a file of a patch$ line: a new file, a change, a change with a rename, or a file that goes."""
+    if status == "added":
+        return f"± See the new file {span(path)}"
+    if status == "deleted":
+        return f"{span(path)} goes"
+    if old:
+        return f"± See the change to {span(path)}, renamed from {span(old)}"
+    return f"± See the change to {span(path)}"
 
 
 def step_tag(

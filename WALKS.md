@@ -444,8 +444,10 @@ patch$ hooks/pre-commit
   shell. If the learner has changed the file, it shows **Replace with the move's file** instead. That button
   first keeps the learner's version on a branch `timewalk/saved/<move>-yours`. Neither button merges, so a file
   never gets conflict markers.
-- **In timewalk, in watch mode,** the line reads "A patch to PATH", with **See diff**.
-- **On the pages,** Read the tutorial shows "A patch to `PATH`.", linked to the file in What changed. Build it
+- **In timewalk, in watch mode,** the line is a button that opens the file's diff. A new file reads **± See the
+  new file PATH**, and a changed one **± See the change to PATH** (timewalk 1.4.6).
+- **On the pages,** Read the tutorial shows the same words as a button to the file in What changed. A renamed
+  file reads "± See the change to `NEW`, renamed from `OLD`". Build it
   yourself shows "Apply the patch to `PATH`:", and a command that applies the patch from GitHub. See
   [The pages that students read](#the-pages-that-students-read).
 - **The learner can also make the change by hand.** The match marks the move done when the files match.
@@ -792,7 +794,8 @@ In Build it yourself, the diffs under What changed are open, with a summary. A p
 The text above What changed explains the change, and What changed is the data that the reader checks against. Two
 forms of the notes become links on the pages:
 
-- A `patch$` line becomes "A patch to `PATH`." in Read the tutorial, with a link to the file in What changed. In
+- A `patch$` line becomes a button in Read the tutorial, "± See the new file `PATH`" or "± See the change to
+  `PATH`", to the file in What changed. In
   Build it yourself, it becomes "Apply the patch to `PATH`, from the top of the project:", and a command that
   applies the patch from GitHub, `curl -sL https://github.com/OWNER/NAME/commit/SHA.diff | git apply --include=PATH`.
   For a part of several commits, the address is `OWNER/NAME/compare/BASE...SHA.diff`. A file that a `do$` line

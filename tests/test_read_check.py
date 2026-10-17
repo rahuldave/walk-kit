@@ -95,7 +95,7 @@ MOVES = f"""## 1.1 A second word {{#step-01.1}}
 
 A second word goes under the first.
 
-A patch to [`a.txt`](#step-01.1-a.txt).
+[± See the change to `a.txt`](#step-01.1-a.txt)
 
 ```bash
 cat a.txt
@@ -280,7 +280,7 @@ class Markdown(Case):
     def test_the_text_of_each_move(self) -> None:
         self.broken(self.page, "A second word goes under the first.", "A second word goes under it.", "the text is missing, or changed")
         self.broken(self.page, "We build demo, a file of words.", "We build demo.", "the intro's text is missing")
-        self.broken(self.page, "A patch to [`a.txt`](#step-01.1-a.txt).", "", "no \"A patch to `a.txt`\"")
+        self.broken(self.page, "[± See the change to `a.txt`](#step-01.1-a.txt)", "", "no \"± See the change to `a.txt`\"")
 
     def test_every_file_and_its_diff(self) -> None:
         self.broken(self.page, f"- <a id=\"step-01.2-uv.lock\"></a>`uv.lock`: New, 1 line. [The file]({URL}/blob/{C}/uv.lock).\n", "",

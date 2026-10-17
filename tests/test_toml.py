@@ -286,7 +286,7 @@ class SetByData(Case):
         files = [file_of("pyproject.toml", "patch", "@@ -1 +1 @@\n-a\n+b\n")]
         parts = [{"kind": "patch", "mode": "shared", "path": "pyproject.toml"}]
         facts, stop = tutorial(LOOSE, self.start, self.sha, parts, files)
-        self.assertIn("A patch to", "\n".join(render.stop_page(facts, stop, 1, "watch", False)))
+        self.assertIn("± See the change to", "\n".join(render.stop_page(facts, stop, 1, "watch", False)))
         facts, stop = tutorial([], self.start, self.sha, parts, files)
         self.assertEqual(render.toml_edits(self.repo, facts), {})
         self.assertIn("git apply", "\n".join(render.stop_page(facts, stop, 1, "do", False)))

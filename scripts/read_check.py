@@ -464,8 +464,10 @@ class Checker:
             if part["kind"] == "patch":
                 found = next((f for f in place["files"] if part["path"] in (f["path"], f["old_path"])), None)
                 path = found["path"] if found else part["path"]
-                if not any(line.startswith("A patch to ") and render.span(path) in line for line in lines):
-                    self.problem(text.where(start), f"{place['name']}: no \"A patch to {render.span(path)}\" for its patch$ line")
+                old = found["old_path"] if found and found["status"] == "renamed" else None
+                words = render.patch_words(found["status"] if found else "modified", path, old)
+                if not any(words in line for line in lines):
+                    self.problem(text.where(start), f"{place['name']}: no \"{words}\" for its patch$ line")
         if not changes:
             for s, _, language, _ in text.fences:
                 if start <= s < end and language == "diff":

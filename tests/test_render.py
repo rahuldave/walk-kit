@@ -434,11 +434,22 @@ class AfterPatch(Case):
         self.assertEqual((self.repo / path).read_text(), '[group]\ndev = [\n    "ruff>=0.18.0",\n]\n\n```\n PATCH\nline-length = 100\n')
 
     def test_watch_shows_the_diff(self) -> None:
-        "Read the tutorial says a patch, and gives no command."
+        "Read the tutorial says what happened to the file, as a link to its diff, and gives no command."
         facts, stop = self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")
         page = "\n".join(render.stop_page(facts, stop, 1, "watch", False))
-        self.assertIn("A patch to", page)
+        self.assertIn("± See the change to `pyproject.toml`", page)
         self.assertNotIn("git apply", page)
+        self.assertNotIn("{.btn", page, "GitHub's pages get a plain link")
+        site = "\n".join(render.stop_page(facts, stop, 1, "watch", True))
+        self.assertIn("± See the change to `pyproject.toml`](#", site)
+        self.assertIn("{.btn .btn-sm .btn-secondary}", site)
+
+    def test_the_words_of_a_patch(self) -> None:
+        "A patch$ line names what happened to its file."
+        self.assertEqual(render.patch_words("added", "t.py", None), "± See the new file `t.py`")
+        self.assertEqual(render.patch_words("modified", "t.py", None), "± See the change to `t.py`")
+        self.assertEqual(render.patch_words("renamed", "n.py", "o.py"), "± See the change to `n.py`, renamed from `o.py`")
+        self.assertEqual(render.patch_words("deleted", "t.py", None), "`t.py` goes")
 
     def test_nothing_left_is_named(self) -> None:
         "A patch$ line whose do$ line already writes the whole file has no command, and source_gaps names it for just check."
