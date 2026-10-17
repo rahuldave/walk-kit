@@ -86,7 +86,7 @@ SMALLDOCS_SKIPS = {"node_modules", "venv", "env", "renv", "site-packages", "__py
 SITE_SETTINGS = "site.toml"  # beside toc.toml: the class's smalldocs theme, owner/repo@ref, and settings of its own for the website
 THEME_LIST = "site/_extensions/.walk-kit"  # the theme's files that render.py wrote, one path a line, for a later run to replace or remove
 # The settings that render.py writes in _smalldocs.yml: the class's own settings may add to them, but not change them
-OWN_SETTINGS = ("project", "website.title", "website.page-navigation", "website.search", "website.sidebar", "website.navbar.left", "theme", "css", "toc",
+OWN_SETTINGS = ("project", "website.title", "website.page-navigation", "website.search", "website.sidebar", "website.navbar.left", "include-after-body", "theme", "css", "toc",
                 "toc-depth", "code-copy", "from", "metadata-files", "format")
 # The names of smalldocs's own themes, which a theme of the class may not take
 BOOTSWATCH = {"cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal", "litera", "lumen", "lux", "materia", "minty", "morph", "pulse",
@@ -338,7 +338,9 @@ class Page:
                     words = patch_words(found["status"] if found else "modified", path, old)
                     if found and found["status"] == "deleted":
                         self.add("", f"{words}.", "")
-                    elif path in known:
+                    elif path in known and diffed(next(f for f in files if f["path"] == path)):
+                        self.add("", self.button(words, f"#{anchor(move, path)}-diff", "secondary"), "")
+                    elif path in known:   # a file with no diff to show, such as a lockfile: its entry in What changed
                         self.add("", self.button(words, f"#{anchor(move, path)}", "secondary"), "")
                     else:
                         self.add("", f"{words}.", "")
@@ -437,7 +439,7 @@ class Page:
                 self.add(f"- `{item['path']}`" + (f", {item['words'].rstrip('.')}" if item["words"] else "") +
                          f". {self.button('The file as it was then', self.blob(then, item['path']), 'secondary')}{self.end()}")
         for found in files:
-            if found["binary"] or not found["diff"] or found["path"].rsplit("/", 1)[-1] in LOCKS:
+            if not diffed(found):
                 continue
             path = f"<code>{escape(found['path'].replace(chr(10), ' '))}</code>"
             by, diff, summary, open_ = found["by"], found["diff"], f"The diff of {path}", ""
@@ -454,7 +456,8 @@ class Page:
                 else:
                     summary = f"The diff that {command} makes in {path}"
             fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", diff)), default=0))
-            self.add("", f"<details{open_}><summary>{summary}</summary>", "", "\n".join([f"{fence}diff", diff.rstrip("\n"), fence]), "", "</details>", "")
+            self.add("", f'<a id="{anchor(move, found["path"])}-diff"></a>', "",   # a link to the diff: the website's script opens it
+                     f"<details{open_}><summary>{summary}</summary>", "", "\n".join([f"{fence}diff", diff.rstrip("\n"), fence]), "", "</details>", "")
         if base is None and first:   # the first part: the project as it starts, which the top of the part links to
             return
         change = f"{self.url}/compare/{base}...{sha}" if base else f"{self.url}/commit/{sha}"
@@ -530,6 +533,30 @@ def counts(
     if found["status"] == "renamed":
         return f"Renamed from `{found['old_path']}`" + (f", {change}" if found["added"] or found["removed"] else "")
     return change[0].upper() + change[1:]
+
+
+OPEN_DIFF = """<script>
+function openDiff(name) {   // the folded diff after the anchor that the address names, as a button to it opens it
+  const mark = name && document.getElementById(decodeURIComponent(name));
+  if (!mark) return;
+  const holder = mark.parentElement && mark.parentElement.tagName === "P" ? mark.parentElement : mark;
+  const diff = mark.closest("details") || holder.nextElementSibling;
+  if (diff && diff.tagName === "DETAILS") { diff.open = true; diff.scrollIntoView(); }
+}
+addEventListener("DOMContentLoaded", () => openDiff(location.hash.slice(1)));
+addEventListener("hashchange", () => openDiff(location.hash.slice(1)));
+document.addEventListener("click", (event) => {   // a second click on the same link changes no hash
+  const link = event.target.closest("a[href^='#']");
+  if (link) setTimeout(() => openDiff(link.getAttribute("href").slice(1)));
+});
+</script>"""  # the script of the website that opens the diff of What changed that a link names
+
+
+def diffed(
+    found: dict,  # A file of a change
+) -> bool:  # Whether What changed shows its diff: not a binary file, a lockfile, or a file with no diff
+    "Tell whether What changed shows a file's diff."
+    return not found["binary"] and bool(found["diff"]) and found["path"].rsplit("/", 1)[-1] not in LOCKS
 
 
 def patch_words(
@@ -1071,7 +1098,9 @@ def site_files(
         "website:", f"  title: {json.dumps(title)}", "  page-navigation: true", "  search: true", *menu, "  sidebar:",
         *("  " + line for line in "\n".join(sidebars).split("\n")), "", *(['metadata-files: ["_settings.yml"]   # the class\'s own settings'] if settings else []),
         f"theme: {json.dumps(theme) if theme else 'cosmo'}", "css: styles.css", "toc: true", "toc-depth: 2", "code-copy: true",
-        "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens", ""])
+        "from: markdown-tex_math_dollars-smart  # a $ is a dollar, not mathematics; -- stays two hyphens",
+        "include-after-body:   # a link to a diff of What changed opens it",
+        "  - text: |", *("      " + line for line in OPEN_DIFF.split("\n")), ""])
     files["styles.css"] = (f"/* {MADE} */\n/* Inline code keeps the code font, without the shaded box and the colour the theme gives it. */\n"
                            "code:not(pre code) {\n  background-color: transparent !important;\n  color: inherit !important;\n"
                            "  padding: 0 !important;\n}\n/* What changed: the diffs fold, and open one at a time. */\n"

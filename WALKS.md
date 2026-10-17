@@ -446,7 +446,9 @@ patch$ hooks/pre-commit
   never gets conflict markers.
 - **In timewalk, in watch mode,** the line is a button that opens the file's diff. A new file reads **± See the
   new file PATH**, and a changed one **± See the change to PATH** (timewalk 1.4.6).
-- **On the pages,** Read the tutorial shows the same words as a button to the file in What changed. A renamed
+- **On the pages,** Read the tutorial shows the same words as a button to the file's diff in What changed. On the
+  website, a click opens the folded diff, with a small script in `_smalldocs.yml`. On GitHub, which runs no script,
+  the link goes to the diff, and the reader opens it. A renamed
   file reads "± See the change to `NEW`, renamed from `OLD`". Build it
   yourself shows "Apply the patch to `PATH`:", and a command that applies the patch from GitHub. See
   [The pages that students read](#the-pages-that-students-read).

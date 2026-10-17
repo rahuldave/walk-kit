@@ -444,6 +444,17 @@ class AfterPatch(Case):
         self.assertIn("± See the change to `pyproject.toml`](#", site)
         self.assertIn("{.btn .btn-sm .btn-secondary}", site)
 
+    def test_the_button_leads_to_the_diff(self) -> None:
+        "Each See the button links to the anchor just before its file's diff, and the website's script opens a diff that a link names."
+        facts, stop = self.facts("pyproject.toml", "a" * 40, "@@ -1 +1,2 @@\n a\n+b\n")
+        site = "\n".join(render.stop_page(facts, stop, 1, "watch", True))
+        target = re.search(r"\[± See the change to `pyproject.toml`\]\(#([^)]+)\)", site).group(1)
+        self.assertTrue(target.endswith("-diff"), target)
+        self.assertRegex(site, rf'<a id="{re.escape(target)}"></a>\n\n<details><summary>The diff of <code>pyproject.toml</code>')
+        config = render.site_files(WalkSites.facts("first", "The first", ""))["_smalldocs.yml"]
+        self.assertIn("include-after-body:", config)
+        self.assertIn('diff.tagName === "DETAILS"', config)
+
     def test_the_words_of_a_patch(self) -> None:
         "A patch$ line names what happened to its file."
         self.assertEqual(render.patch_words("added", "t.py", None), "± See the new file `t.py`")
