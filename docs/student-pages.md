@@ -115,7 +115,7 @@ by its old path gets the command for the new path, which renames the file.
 | `walks/README.md` | A list of every walk, with a link to each of its pages and to its website |
 | `walks/ID/read.md` | Read the tutorial, as one page for GitHub |
 | `walks/ID/build.md` | Build it yourself, as one page for GitHub. A narrative has none |
-| `site/` | The website, with the pages of the first walk at the top |
+| `site/` | The website, with the pages of the first walk at the top. Its front page ends with how to follow the walks in timewalk: the walk repository to fork, and `just present` with the id of each walk |
 | `site/ID/` | The pages of each other walk on the website. A menu **Walks** in the navbar lists every walk |
 | `site/_extensions/` | The theme of the website, when the class has one |
 | `.github/workflows/pages.yml` | The workflow that builds the website with smalldocs, and publishes it on GitHub Pages |

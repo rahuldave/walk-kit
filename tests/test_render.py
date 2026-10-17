@@ -804,6 +804,20 @@ class WalkSites(unittest.TestCase):
         alone = self.pages({"first": self.facts("first", "The first", "One.")})["site/_smalldocs.yml"]
         self.assertNotIn("navbar", alone, "one walk: no menu, and no navbar")
 
+    def test_follow_in_timewalk(self) -> None:
+        "The website's front page ends with how to follow the walks in timewalk, for this class: its walk repository, and just present with each id."
+        walks = {"first": self.facts("first", "The first", ""), "second": self.facts("second", "Second", "")}
+        walks["second"]["walk"]["kind"] = "tutorial"
+        pages = self.pages(walks)
+        front = pages["site/index.qmd"]
+        section = front[front.index("## Follow the walks in timewalk"):]
+        self.assertTrue(front.rstrip().endswith("(https://rahuldave.com/timewalk/images/tutorial-do.png)"), "the last section of the page")
+        self.assertIn("Fork [o/demo-walk](https://github.com/o/demo-walk) on GitHub", section)
+        self.assertIn("```bash\ngit clone https://github.com/YOU/demo-walk\ncd demo-walk\njust present\n```", section)
+        self.assertIn("`just present` opens the first walk, *The first* (a narrative). To open another, give its id:", section)
+        self.assertIn("- `just present second`: *Second* (a tutorial)", section)
+        self.assertNotIn("Follow the walks in timewalk", pages["site/second/index.qmd"], "once, on the website's front page")
+
     def test_an_id_that_clashes(self) -> None:
         "A walk after the first may not have an id that the first walk uses at the top of site/, in any case."
         for ident in ("read", "build", "index", "site_libs", "search.json", "Read"):

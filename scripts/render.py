@@ -1263,12 +1263,46 @@ def walk_site(
                 sidebar += [f"          - text: {json.dumps(label)}\n            href: {prefix}{page}"]
         front.append("")
     if others:
-        front += ["## The other walks", "", "Each other walk through the project has a website of its own:", ""]
+        front += ["## The other walks", "", "Each other walk through the project has pages of its own:", ""]
         front += [f"- [{bracketed(other['title'])}]({quote(other['id'])}/index.html)." + (f" {ended(other['description'])}" if other.get("description", "").strip() else "")
                   for other in others]
         front.append("")
+    if not home:   # the first walk's front page, the website's: how to follow the walks in timewalk
+        front += timewalk_lines(facts, others)
     files["index.qmd"] = f"---\ntitle: {json.dumps(title)}\n---\n\n" + squeeze(front)
     return files, sidebar
+
+
+def timewalk_lines(
+    facts: dict,  # The facts of the first walk
+    others: list[dict],  # The walk of each other walk of the class (its id, title and kind)
+) -> list[str]:  # The section of the website's front page that says how to follow the walks in timewalk
+    """Say what timewalk is, and how to follow the walks of this class in it: fork and clone the walk repository, then
+    just present, with the id of each walk. The screenshots are timewalk's own, from its website."""
+    url = github(facts)
+    owner, project = url.rsplit("/", 2)[-2:]
+    walk = f"{project}-walk"
+    kind = {"tutorial": "a tutorial", "narrative": "a narrative"}
+    lines = ["## Follow the walks in timewalk", "",
+             f"[timewalk](https://rahuldave.com/timewalk/) replays these walks in your browser. At each part, it shows the "
+             f"files of {project} as they were, and what the part changed. It also shows the notes, and terminals in the project "
+             "as it was then.", "",
+             "A narrative goes from part to part. A tutorial has two modes. In watch mode, timewalk shows each change. In "
+             "do mode, you make each change yourself, and timewalk tells you when your files match.", "",
+             "![A part in timewalk: a slide, the files, a file, a terminal and the notes](https://rahuldave.com/timewalk/images/page.png)", "",
+             f"You need [uv](https://docs.astral.sh/uv/), [git](https://git-scm.com/), [just](https://just.systems/) and a "
+             f"recent browser. Fork [{owner}/{walk}](https://github.com/{owner}/{walk}) on GitHub, so that you can keep your "
+             "own notes, and clone your fork. In its folder, run `just present`, and open the address that timewalk prints. "
+             f"The first time, it clones {project} into the folder `repo/`.", "",
+             "```bash", f"git clone https://github.com/YOU/{walk}", f"cd {walk}", "just present", "```", ""]
+    first = facts["walk"]
+    lines.append(f"`just present` opens the first walk, *{first['title']}* ({kind.get(first.get('kind'), 'a walk')})."
+                 + (" To open another, give its id:" if others else ""))
+    if others:
+        lines.append("")
+        lines += [f"- `just present {other['id']}`: *{other['title']}* ({kind.get(other.get('kind'), 'a walk')})" for other in others]
+    lines += ["", "![Do mode: you make each change, and timewalk checks your files](https://rahuldave.com/timewalk/images/tutorial-do.png)", ""]
+    return lines
 
 
 def squeeze(
